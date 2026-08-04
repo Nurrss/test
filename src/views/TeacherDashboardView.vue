@@ -1,5 +1,6 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
 import AppCard from '../components/shared/AppCard.vue'
 import AppButton from '../components/shared/AppButton.vue'
@@ -8,55 +9,86 @@ import RecentResultsTable from '../components/dashboard/RecentResultsTable.vue'
 import VariantsManagerPanel from '../components/dashboard/VariantsManagerPanel.vue'
 import AddStudentModal from '../components/shared/AddStudentModal.vue'
 
-// TODO: заменить на реальные select() из exam_attempts / profiles / exam_variants,
-// когда экран наполняется бизнес-логикой.
 const auth = useAuthStore()
 const showAddStudent = ref(false)
+const loading = ref(true)
+const errorMessage = ref('')
 
-const stats = [
-  { label: 'Барлық оқушылар', value: 128, to: { name: 'students' } },
-  { label: 'Тағайындалған емтихандар', value: 34 },
-  { label: 'Аяқталды', value: 21, to: { name: 'results' } },
-  { label: 'Бағалау қажет', value: 6, to: { name: 'grading' } },
-]
+const stats = ref([
+  { label: 'Барлық оқушылар', value: '—', to: { name: 'students' } },
+  { label: 'Тағайындалған емтихандар', value: '—' },
+  { label: 'Аяқталды', value: '—', to: { name: 'results' } },
+  { label: 'Бағалау қажет', value: '—', to: { name: 'grading' } },
+])
+const recentResults = ref([])
+const variants = ref([])
 
-const recentResults = [
-  {
-    attempt_id: 'mock-1',
-    student_name: 'Айдана Серікова',
-    group_name: '10А',
-    variant_name: 'A2 - Нұсқа 1',
-    total_score: 62,
-    cefr_level: 'A2',
-    date: '2026-08-01',
-  },
-  {
-    attempt_id: 'mock-2',
-    student_name: 'Нұрлан Ахметов',
-    group_name: '10Б',
-    variant_name: 'A1 - Нұсқа 2',
-    total_score: 41,
-    cefr_level: 'A1',
-    date: '2026-07-30',
-  },
-  {
-    attempt_id: 'mock-3',
-    student_name: 'Гүлнұр Қасымова',
-    group_name: '10А',
-    variant_name: 'Above A2 - Нұсқа 1',
-    total_score: 74,
-    cefr_level: 'Above A2',
-    date: '2026-07-29',
-  },
-]
+async function loadDashboard() {
+  loading.value = true
+  errorMessage.value = ''
 
-const variants = [
-  { id: 'v1', name: 'A1 - Нұсқа 1', level: 'A1', question_count: 24 },
-  { id: 'v2', name: 'A1 - Нұсқа 2', level: 'A1', question_count: 24 },
-  { id: 'v3', name: 'A2 - Нұсқа 1', level: 'A2', question_count: 28 },
-  { id: 'v4', name: 'Above A2 - Нұсқа 1', level: 'Above A2', question_count: 30 },
-]
+  const [studentsCount, assignmentsCount, completedCount, pendingGrading, recentRes, variantsRes] =
+    await Promise.all([
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'),
+      supabase.from('exam_assignments').select('id', { count: 'exact', head: true }),
+      supabase.from('exam_attempts').select('id', { count: 'exact', head: true }).in('status', ['submitted', 'graded']),
+      supabase
+        .from('student_answers')
+        .select('attempt_id, questions!inner(requires_manual_grading), exam_attempts!inner(status)')
+        .is('points_awarded', null)
+        .eq('questions.requires_manual_grading', true)
+        .eq('exam_attempts.status', 'submitted'),
+      supabase
+        .from('exam_attempts')
+        .select('id, total_score, cefr_level, created_at, profiles(full_name, group_name), exam_variants(name)')
+        .in('status', ['submitted', 'graded'])
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabase.from('exam_variants').select('id, name, level, questions(count)').eq('is_active', true),
+    ])
 
+  const firstError = [studentsCount, assignmentsCount, completedCount, pendingGrading, recentRes, variantsRes].find(
+    (r) => r.error
+  )?.error
+
+  if (firstError) {
+    errorMessage.value = 'Деректерді жүктеу мүмкін болмады: ' + firstError.message
+    loading.value = false
+    return
+  }
+
+  stats.value = [
+    { label: 'Барлық оқушылар', value: studentsCount.count ?? 0, to: { name: 'students' } },
+    { label: 'Тағайындалған емтихандар', value: assignmentsCount.count ?? 0 },
+    { label: 'Аяқталды', value: completedCount.count ?? 0, to: { name: 'results' } },
+    {
+      label: 'Бағалау қажет',
+      value: new Set((pendingGrading.data || []).map((r) => r.attempt_id)).size,
+      to: { name: 'grading' },
+    },
+  ]
+
+  recentResults.value = (recentRes.data || []).map((row) => ({
+    attempt_id: row.id,
+    student_name: row.profiles?.full_name || '—',
+    group_name: row.profiles?.group_name || '—',
+    variant_name: row.exam_variants?.name || '—',
+    total_score: row.total_score ?? '—',
+    cefr_level: row.cefr_level || '—',
+    date: row.created_at ? row.created_at.slice(0, 10) : '—',
+  }))
+
+  variants.value = (variantsRes.data || []).map((v) => ({
+    id: v.id,
+    name: v.name,
+    level: v.level,
+    question_count: v.questions?.[0]?.count ?? 0,
+  }))
+
+  loading.value = false
+}
+
+onMounted(loadDashboard)
 </script>
 
 <template>
@@ -69,6 +101,8 @@ const variants = [
       <AppButton @click="showAddStudent = true">Оқушы қосу</AppButton>
     </div>
 
+    <p v-if="errorMessage" class="dashboard__error">{{ errorMessage }}</p>
+
     <div class="dashboard__stats">
       <StatCard v-for="stat in stats" :key="stat.label" :value="stat.value" :label="stat.label" :to="stat.to" />
     </div>
@@ -76,7 +110,8 @@ const variants = [
     <div class="dashboard__grid">
       <AppCard class="dashboard__results">
         <h2>Соңғы емтихан нәтижелері</h2>
-        <RecentResultsTable :rows="recentResults" />
+        <p v-if="loading" class="dashboard__loading">Жүктелуде...</p>
+        <RecentResultsTable v-else :rows="recentResults" />
       </AppCard>
 
       <AppCard class="dashboard__variants">
@@ -110,6 +145,20 @@ const variants = [
 .dashboard__date {
   color: var(--color-text-secondary);
   margin-top: 0.3rem;
+}
+
+.dashboard__error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-label);
+}
+
+.dashboard__loading {
+  color: var(--color-text-secondary);
+  padding: 1rem 0;
 }
 
 .dashboard__stats {
