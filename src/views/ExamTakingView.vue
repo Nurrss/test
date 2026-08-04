@@ -1,5 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../stores/auth'
 import ExamProgressSidebar from '../components/exam/ExamProgressSidebar.vue'
 import QuestionMultipleChoice from '../components/exam/QuestionMultipleChoice.vue'
 import QuestionTextResponse from '../components/exam/QuestionTextResponse.vue'
@@ -8,129 +10,43 @@ import TabWarningModal from '../components/exam/TabWarningModal.vue'
 import AppButton from '../components/shared/AppButton.vue'
 import AppCard from '../components/shared/AppCard.vue'
 
-// TODO: вопросы/варианты грузятся из questions по exam_assignments.variant_id,
-// ответы пишутся в student_answers через Edge Function submit-answer,
-// антилив-события — в tab_events с реальным attempt_id (сейчас его ещё нет,
-// т.к. exam_attempts не создаётся на этом этапе).
-const variantName = 'A2 — Нұсқа 1'
+const auth = useAuthStore()
 
-const sectionsData = [
-  {
-    key: 'listening',
-    label: 'Listening',
-    points: 20,
-    timeLimitSec: 900,
-    questions: [
-      {
-        id: 'l1',
-        question_type: 'multiple_choice',
-        media_url: null,
-        content: {
-          text: 'Listen to the audio and choose the correct answer: Where does the conversation take place?',
-          options: [
-            { id: 'a', label: 'At the airport' },
-            { id: 'b', label: 'At the restaurant' },
-            { id: 'c', label: 'At the hotel' },
-          ],
-        },
-      },
-      {
-        id: 'l2',
-        question_type: 'true_false',
-        media_url: null,
-        content: {
-          text: 'Тыңдаңыз және сөйлемнің суретке сәйкес келетінін белгілеңіз.',
-          statement: 'They are near the lake.',
-          image_decor_zone: 'exam-listening-photo',
-          options: [
-            { id: 'true', label: 'Дұрыс' },
-            { id: 'false', label: 'Бұрыс' },
-          ],
-        },
-      },
-    ],
-  },
-  {
-    key: 'reading',
-    label: 'Reading',
-    points: 20,
-    timeLimitSec: 1200,
-    questions: [
-      {
-        id: 'r1',
-        question_type: 'multiple_choice',
-        content: {
-          text: 'Read the text and choose the best title.',
-          options: [
-            { id: 'a', label: 'A Trip to the Mountains' },
-            { id: 'b', label: 'How to Cook Pilaf' },
-            { id: 'c', label: 'Learning a New Language' },
-          ],
-        },
-      },
-    ],
-  },
-  {
-    key: 'writing',
-    label: 'Writing',
-    points: 20,
-    timeLimitSec: 900,
-    questions: [
-      {
-        id: 'w1',
-        question_type: 'open_text',
-        content: {
-          text: 'Write a short paragraph (80–100 words) about your favorite season and why you like it.',
-          placeholder: 'My favorite season is...',
-        },
-      },
-    ],
-  },
-  {
-    key: 'speaking',
-    label: 'Speaking',
-    points: 20,
-    timeLimitSec: 420,
-    questions: [
-      {
-        id: 'sp1',
-        question_type: 'audio_response',
-        content: {
-          text: 'Describe your city. Speak for about one minute.',
-        },
-      },
-    ],
-  },
-]
+const SECTION_ORDER = ['listening', 'reading', 'writing', 'speaking']
+const SECTION_LABELS = { listening: 'Listening', reading: 'Reading', writing: 'Writing', speaking: 'Speaking' }
+
+const loading = ref(true)
+const loadError = ref('')
+const noAssignment = ref(false)
+const alreadySubmitted = ref(false)
+
+const variantName = ref('')
+const sectionsData = ref([])
+const attempt = ref(null)
 
 const currentSectionIndex = ref(0)
 const currentQuestionIndex = ref(0)
 const answers = ref({})
-const remainingSeconds = ref(sectionsData[0].timeLimitSec)
+const remainingSeconds = ref(0)
 const examSubmitted = ref(false)
 const showTabWarning = ref(false)
 
 let timerHandle = null
 let hasLeftTab = false
 
-const currentSection = computed(() => sectionsData[currentSectionIndex.value])
-const currentQuestion = computed(() => currentSection.value.questions[currentQuestionIndex.value])
+const currentSection = computed(() => sectionsData.value[currentSectionIndex.value])
+const currentQuestion = computed(() => currentSection.value?.questions[currentQuestionIndex.value])
 const isLastQuestionInSection = computed(
-  () => currentQuestionIndex.value === currentSection.value.questions.length - 1
+  () => currentSection.value && currentQuestionIndex.value === currentSection.value.questions.length - 1
 )
-const isLastSection = computed(() => currentSectionIndex.value === sectionsData.length - 1)
+const isLastSection = computed(() => currentSectionIndex.value === sectionsData.value.length - 1)
 
 const progressSections = computed(() =>
-  sectionsData.map((section, index) => ({
+  sectionsData.value.map((section, index) => ({
     key: section.key,
     label: section.label,
     points: section.points,
-    status:
-      index < currentSectionIndex.value
-        ? 'done'
-        : index === currentSectionIndex.value
-          ? 'active'
-          : 'upcoming',
+    status: index < currentSectionIndex.value ? 'done' : index === currentSectionIndex.value ? 'active' : 'upcoming',
   }))
 )
 
@@ -146,8 +62,131 @@ function questionComponent(question) {
   return QuestionMultipleChoice
 }
 
+// ------- загрузка/создание попытки -------
+async function loadExam() {
+  loading.value = true
+  loadError.value = ''
+  const studentId = auth.session?.user?.id
+
+  const { data: assignment, error: assignmentError } = await supabase
+    .from('exam_assignments')
+    .select('variant_id')
+    .eq('student_id', studentId)
+    .order('assigned_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (assignmentError) {
+    loadError.value = 'Тағайындалған емтиханды тексеру мүмкін болмады: ' + assignmentError.message
+    loading.value = false
+    return
+  }
+  if (!assignment) {
+    noAssignment.value = true
+    loading.value = false
+    return
+  }
+
+  const [{ data: variant, error: variantError }, { data: questions, error: questionsError }] = await Promise.all([
+    supabase.from('exam_variants').select('*').eq('id', assignment.variant_id).single(),
+    supabase
+      .from('questions')
+      .select('*')
+      .eq('variant_id', assignment.variant_id)
+      .order('section')
+      .order('order_index'),
+  ])
+
+  if (variantError || questionsError) {
+    loadError.value = 'Емтихан деректерін жүктеу мүмкін болмады: ' + (variantError || questionsError).message
+    loading.value = false
+    return
+  }
+
+  variantName.value = variant.name
+  const timeLimitBySection = {
+    listening: variant.listening_time_limit_sec,
+    reading: variant.reading_time_limit_sec,
+    writing: variant.writing_time_limit_sec,
+    speaking: variant.speaking_time_limit_sec,
+  }
+
+  sectionsData.value = SECTION_ORDER.filter((key) => (questions || []).some((q) => q.section === key)).map(
+    (key) => {
+      const sectionQuestions = questions.filter((q) => q.section === key)
+      return {
+        key,
+        label: SECTION_LABELS[key],
+        points: sectionQuestions.reduce((sum, q) => sum + Number(q.max_points), 0),
+        timeLimitSec: timeLimitBySection[key],
+        questions: sectionQuestions.map((q) => ({
+          id: q.id,
+          question_type: q.question_type,
+          media_url: q.media_url,
+          content: q.content,
+          max_points: q.max_points,
+        })),
+      }
+    }
+  )
+
+  const { data: existingAttempt, error: attemptError } = await supabase
+    .from('exam_attempts')
+    .select('*')
+    .eq('student_id', studentId)
+    .eq('variant_id', assignment.variant_id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (attemptError) {
+    loadError.value = 'Талпынысты тексеру мүмкін болмады: ' + attemptError.message
+    loading.value = false
+    return
+  }
+
+  if (existingAttempt && existingAttempt.status !== 'in_progress') {
+    alreadySubmitted.value = true
+    loading.value = false
+    return
+  }
+
+  if (existingAttempt) {
+    attempt.value = existingAttempt
+    const resumeIndex = sectionsData.value.findIndex((s) => s.key === existingAttempt.current_section)
+    currentSectionIndex.value = resumeIndex >= 0 ? resumeIndex : 0
+
+    const { data: previousAnswers } = await supabase
+      .from('student_answers')
+      .select('question_id, answer')
+      .eq('attempt_id', existingAttempt.id)
+
+    for (const row of previousAnswers || []) {
+      if (row.answer !== null) answers.value[row.question_id] = row.answer
+    }
+  } else {
+    const { data: created, error: createError } = await supabase
+      .from('exam_attempts')
+      .insert({ student_id: studentId, variant_id: assignment.variant_id, current_section: sectionsData.value[0]?.key })
+      .select()
+      .single()
+
+    if (createError) {
+      loadError.value = 'Талпынысты бастау мүмкін болмады: ' + createError.message
+      loading.value = false
+      return
+    }
+    attempt.value = created
+  }
+
+  loading.value = false
+  startSectionTimer()
+}
+
+// ------- таймер -------
 function startSectionTimer() {
   clearInterval(timerHandle)
+  if (!currentSection.value) return
   remainingSeconds.value = currentSection.value.timeLimitSec
   timerHandle = setInterval(() => {
     remainingSeconds.value -= 1
@@ -158,30 +197,80 @@ function startSectionTimer() {
   }, 1000)
 }
 
-function goToNextSection() {
+// ------- сохранение ответа -------
+async function saveCurrentAnswer() {
+  const question = currentQuestion.value
+  if (!question || !attempt.value) return
+  const value = answers.value[question.id]
+  if (value === undefined) return
+
+  try {
+    if (question.question_type === 'audio_response') {
+      if (!value?.audioBlob) return
+      const path = `${attempt.value.id}/${question.id}.webm`
+      const { error: uploadError } = await supabase.storage
+        .from('speaking-recordings')
+        .upload(path, value.audioBlob, { contentType: value.audioBlob.type || 'audio/webm', upsert: true })
+      if (uploadError) throw uploadError
+
+      const { error: rpcError } = await supabase.rpc('submit_answer', {
+        p_attempt_id: attempt.value.id,
+        p_question_id: question.id,
+        p_answer: null,
+        p_audio_path: path,
+      })
+      if (rpcError) throw rpcError
+    } else {
+      const { error: rpcError } = await supabase.rpc('submit_answer', {
+        p_attempt_id: attempt.value.id,
+        p_question_id: question.id,
+        p_answer: value,
+        p_audio_path: null,
+      })
+      if (rpcError) throw rpcError
+    }
+  } catch (err) {
+    loadError.value = 'Жауапты сақтау мүмкін болмады: ' + (err?.message || err)
+  }
+}
+
+async function goToNextSection() {
   if (isLastSection.value) {
-    finishExam()
+    await finishExam()
     return
   }
   currentSectionIndex.value += 1
   currentQuestionIndex.value = 0
+
+  await supabase
+    .from('exam_attempts')
+    .update({ current_section: sectionsData.value[currentSectionIndex.value].key })
+    .eq('id', attempt.value.id)
+
   startSectionTimer()
 }
 
-function handleNext() {
+async function handleNext() {
+  await saveCurrentAnswer()
   if (!isLastQuestionInSection.value) {
     currentQuestionIndex.value += 1
     return
   }
-  goToNextSection()
+  await goToNextSection()
 }
 
-function handlePrev() {
+async function handlePrev() {
+  await saveCurrentAnswer()
   if (currentQuestionIndex.value > 0) currentQuestionIndex.value -= 1
 }
 
-function finishExam() {
+async function finishExam() {
   clearInterval(timerHandle)
+  const { error } = await supabase.rpc('finalize_attempt', { p_attempt_id: attempt.value.id })
+  if (error) {
+    loadError.value = 'Емтиханды аяқтау мүмкін болмады: ' + error.message
+    return
+  }
   examSubmitted.value = true
 }
 
@@ -189,9 +278,11 @@ function setAnswer(value) {
   answers.value[currentQuestion.value.id] = value
 }
 
-// --- antileave: перенесено из прототипа (visibilitychange + window blur/focus) ---
-function logTabEvent(eventType) {
-  console.log('[tab-event]', eventType, new Date().toISOString(), '(attempt_id TODO)')
+// --- antileave: visibilitychange + window blur/focus, лог в tab_events ---
+async function logTabEvent(eventType) {
+  console.log('[tab-event]', eventType, new Date().toISOString())
+  if (!attempt.value) return
+  await supabase.from('tab_events').insert({ attempt_id: attempt.value.id, event_type: eventType })
 }
 
 function handleVisibilityChange() {
@@ -219,7 +310,7 @@ function handleWindowFocus() {
 }
 
 onMounted(() => {
-  startSectionTimer()
+  loadExam()
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('blur', handleWindowBlur)
   window.addEventListener('focus', handleWindowFocus)
@@ -235,7 +326,19 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="exam-taking">
-    <template v-if="!examSubmitted">
+    <p v-if="loading" class="exam-taking__status">Жүктелуде...</p>
+
+    <div v-else-if="noAssignment" class="exam-taking__submitted">
+      <h1>Емтихан тағайындалмаған</h1>
+      <p>Сізге әлі емтихан нұсқасы тағайындалмаған. Мұғаліммен байланысыңыз.</p>
+    </div>
+
+    <div v-else-if="alreadySubmitted" class="exam-taking__submitted">
+      <h1>Сіз бұл емтиханды тапсырдыңыз</h1>
+      <p>Нәтижелер мұғалім тексергеннен кейін жарияланады.</p>
+    </div>
+
+    <template v-else-if="!examSubmitted">
       <AppCard class="exam-taking__progress-card">
         <ExamProgressSidebar :sections="progressSections" />
       </AppCard>
@@ -261,8 +364,11 @@ onBeforeUnmount(() => {
           <span class="exam-taking__timer">{{ formattedTimer }}</span>
         </div>
 
+        <p v-if="loadError" class="exam-taking__error">{{ loadError }}</p>
+
         <component
           :is="questionComponent(currentQuestion)"
+          :key="currentQuestion.id"
           :question="currentQuestion"
           :model-value="answers[currentQuestion.id]"
           @update:modelValue="setAnswer"
@@ -296,6 +402,11 @@ onBeforeUnmount(() => {
   padding: 2rem;
   min-height: 100vh;
   background: var(--color-bg);
+}
+
+.exam-taking__status {
+  margin: auto;
+  color: var(--color-text-secondary);
 }
 
 .exam-taking__progress-card {
@@ -361,6 +472,15 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-size: 18px;
   color: var(--color-primary-dark);
+}
+
+.exam-taking__error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-label);
 }
 
 .exam-taking__nav {
