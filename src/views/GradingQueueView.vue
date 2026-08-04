@@ -1,54 +1,129 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../stores/auth'
+import { cefrFromScore } from '../lib/cefr'
 import AppCard from '../components/shared/AppCard.vue'
 import AppButton from '../components/shared/AppButton.vue'
 
-// TODO: заменить на select() из student_answers, где attempt.status='submitted'
-// и requires_manual_grading=true, points_awarded is null.
-const submissions = ref([
-  {
-    id: 'g1',
-    student_name: 'Айдана Серікова',
-    section: 'Writing',
-    question_label: 'Writing — Task 2',
-    question_type: 'open_text',
-    content_text:
-      'My favorite season is summer because I can travel with my family and spend more time outside...',
-    max_points: 10,
-    score: null,
-    feedback: '',
-  },
-  {
-    id: 'g2',
-    student_name: 'Нұрлан Ахметов',
-    section: 'Speaking',
-    question_label: 'Speaking — Part 1',
-    question_type: 'audio_response',
-    audio_url: null,
-    max_points: 10,
-    score: null,
-    feedback: '',
-  },
-  {
-    id: 'g3',
-    student_name: 'Гүлнұр Қасымова',
-    section: 'Writing',
-    question_label: 'Writing — Task 1',
-    question_type: 'open_text',
-    content_text: 'Dear Sir or Madam, I am writing to complain about...',
-    max_points: 10,
-    score: null,
-    feedback: '',
-  },
-])
+const auth = useAuthStore()
+const loading = ref(true)
+const errorMessage = ref('')
+const submissions = ref([])
+const selectedId = ref(null)
 
-const selectedId = ref(submissions.value[0]?.id ?? null)
+const sectionLabels = {
+  listening: 'Listening',
+  reading: 'Reading',
+  writing: 'Writing',
+  speaking: 'Speaking',
+}
+
 const selected = computed(() => submissions.value.find((s) => s.id === selectedId.value))
 
-function saveScore() {
-  // TODO: update('student_answers').set({ points_awarded, teacher_feedback }) через Supabase.
-  const index = submissions.value.findIndex((s) => s.id === selectedId.value)
-  if (index === -1) return
+async function loadQueue() {
+  loading.value = true
+  errorMessage.value = ''
+
+  const { data, error } = await supabase
+    .from('student_answers')
+    .select(
+      'id, answer, audio_path, questions!inner(section, order_index, question_type, max_points, requires_manual_grading), exam_attempts!inner(id, status, profiles(full_name))'
+    )
+    .is('points_awarded', null)
+    .eq('questions.requires_manual_grading', true)
+    .eq('exam_attempts.status', 'submitted')
+
+  if (error) {
+    errorMessage.value = 'Тізімді жүктеу мүмкін болмады: ' + error.message
+    loading.value = false
+    return
+  }
+
+  submissions.value = await Promise.all(
+    (data || []).map(async (row) => {
+      let audioUrl = null
+      if (row.audio_path) {
+        const { data: signed } = await supabase.storage
+          .from('speaking-recordings')
+          .createSignedUrl(row.audio_path, 3600)
+        audioUrl = signed?.signedUrl || null
+      }
+
+      return {
+        id: row.id,
+        attempt_id: row.exam_attempts.id,
+        student_name: row.exam_attempts.profiles?.full_name || '—',
+        question_label: `${sectionLabels[row.questions.section] || row.questions.section} — ${row.questions.order_index}`,
+        question_type: row.questions.question_type,
+        content_text: row.answer,
+        audio_url: audioUrl,
+        max_points: row.questions.max_points,
+        score: 0,
+        feedback: '',
+      }
+    })
+  )
+
+  selectedId.value = submissions.value[0]?.id ?? null
+  loading.value = false
+}
+
+onMounted(loadQueue)
+
+async function finalizeAttemptIfComplete(attemptId) {
+  const { data: remaining } = await supabase
+    .from('student_answers')
+    .select('id, questions!inner(requires_manual_grading)')
+    .eq('attempt_id', attemptId)
+    .is('points_awarded', null)
+    .eq('questions.requires_manual_grading', true)
+
+  if (remaining && remaining.length > 0) return
+
+  const [{ data: allAnswers }, { data: attemptRow }] = await Promise.all([
+    supabase.from('student_answers').select('points_awarded').eq('attempt_id', attemptId),
+    supabase.from('exam_attempts').select('auto_score').eq('id', attemptId).single(),
+  ])
+
+  const totalScore = (allAnswers || []).reduce((sum, a) => sum + Number(a.points_awarded || 0), 0)
+  const autoScore = Number(attemptRow?.auto_score || 0)
+
+  await supabase
+    .from('exam_attempts')
+    .update({
+      manual_score: totalScore - autoScore,
+      total_score: totalScore,
+      cefr_level: cefrFromScore(totalScore),
+      status: 'graded',
+    })
+    .eq('id', attemptId)
+}
+
+async function saveScore() {
+  const item = selected.value
+  if (!item) return
+
+  errorMessage.value = ''
+
+  const { error } = await supabase
+    .from('student_answers')
+    .update({
+      points_awarded: item.score,
+      teacher_feedback: item.feedback,
+      graded_by: auth.session?.user?.id,
+      graded_at: new Date().toISOString(),
+    })
+    .eq('id', item.id)
+
+  if (error) {
+    errorMessage.value = 'Бағаны сақтау мүмкін болмады: ' + error.message
+    return
+  }
+
+  await finalizeAttemptIfComplete(item.attempt_id)
+
+  const index = submissions.value.findIndex((s) => s.id === item.id)
   submissions.value.splice(index, 1)
   selectedId.value = submissions.value[0]?.id ?? null
 }
@@ -58,7 +133,10 @@ function saveScore() {
   <div class="grading">
     <h1>Бағалау</h1>
 
-    <div class="grading__layout">
+    <p v-if="errorMessage" class="grading__error">{{ errorMessage }}</p>
+    <p v-if="loading" class="grading__loading">Жүктелуде...</p>
+
+    <div v-else class="grading__layout">
       <AppCard class="grading__list" :padded="false">
         <ul class="grading__list-items">
           <li
@@ -80,17 +158,23 @@ function saveScore() {
       <AppCard v-if="selected" class="grading__detail">
         <h2>{{ selected.student_name }} — {{ selected.question_label }}</h2>
 
-        <div v-if="selected.question_type === 'open_text'" class="grading__answer-text">
-          {{ selected.content_text }}
+        <div v-if="selected.question_type !== 'audio_response'" class="grading__answer-text">
+          {{ selected.content_text || '—' }}
         </div>
         <div v-else class="grading__answer-audio">
           <audio v-if="selected.audio_url" :src="selected.audio_url" controls></audio>
-          <p v-else class="grading__no-audio">Дауыс жазбасы жоқ (mock деректер)</p>
+          <p v-else class="grading__no-audio">Дауыс жазбасы табылмады</p>
         </div>
 
         <div class="grading__form">
           <label>Балл (0 – {{ selected.max_points }})</label>
-          <input v-model.number="selected.score" type="number" min="0" :max="selected.max_points" class="grading__score-input" />
+          <input
+            v-model.number="selected.score"
+            type="number"
+            min="0"
+            :max="selected.max_points"
+            class="grading__score-input"
+          />
 
           <label>Пікір</label>
           <textarea v-model="selected.feedback" class="grading__feedback" placeholder="Оқушыға пікір..."></textarea>
@@ -111,6 +195,19 @@ function saveScore() {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.grading__error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-label);
+}
+
+.grading__loading {
+  color: var(--color-text-secondary);
 }
 
 .grading__layout {
@@ -166,6 +263,7 @@ function saveScore() {
   padding: 1rem;
   line-height: 1.6;
   margin-bottom: 1.5rem;
+  white-space: pre-wrap;
 }
 
 .grading__answer-audio {
