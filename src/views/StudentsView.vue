@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { supabase } from '../lib/supabase'
 import AppCard from '../components/shared/AppCard.vue'
 import AppButton from '../components/shared/AppButton.vue'
 import AppInput from '../components/shared/AppInput.vue'
@@ -9,25 +10,84 @@ import DataTable from '../components/shared/DataTable.vue'
 import CefrBadge from '../components/shared/CefrBadge.vue'
 import AddStudentModal from '../components/shared/AddStudentModal.vue'
 
-// TODO: заменить на select() из profiles (role='student') + агрегаты по exam_attempts.
 const router = useRouter()
 const showAddStudent = ref(false)
 const search = ref('')
 const groupFilter = ref('Барлығы')
 const statusFilter = ref('Барлығы')
+const loading = ref(true)
+const errorMessage = ref('')
+const students = ref([])
 
-const students = [
-  { id: 's1', full_name: 'Айдана Серікова', group_name: '10А', phone: '+7 700 111 22 33', attempts_count: 2, last_score: 62, cefr_level: 'A2', status: 'Аяқталды' },
-  { id: 's2', full_name: 'Нұрлан Ахметов', group_name: '10Б', phone: '+7 700 222 33 44', attempts_count: 1, last_score: 41, cefr_level: 'A1', status: 'Аяқталды' },
-  { id: 's3', full_name: 'Гүлнұр Қасымова', group_name: '10А', phone: '+7 700 333 44 55', attempts_count: 3, last_score: 74, cefr_level: 'Above A2', status: 'Өтіп жатыр' },
-  { id: 's4', full_name: 'Дәулет Жұманов', group_name: '10В', phone: '+7 700 444 55 66', attempts_count: 0, last_score: null, cefr_level: null, status: 'Басталмаған' },
-]
+async function loadStudents() {
+  loading.value = true
+  errorMessage.value = ''
 
-const groups = computed(() => ['Барлығы', ...new Set(students.map((s) => s.group_name))])
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, full_name, group_name, phone')
+    .eq('role', 'student')
+    .order('full_name')
+
+  if (profilesError) {
+    errorMessage.value = 'Оқушыларды жүктеу мүмкін болмады: ' + profilesError.message
+    loading.value = false
+    return
+  }
+
+  const studentIds = (profiles || []).map((p) => p.id)
+  let attemptsByStudent = new Map()
+
+  if (studentIds.length) {
+    const { data: attempts, error: attemptsError } = await supabase
+      .from('exam_attempts')
+      .select('id, student_id, status, total_score, cefr_level, created_at')
+      .in('student_id', studentIds)
+      .order('created_at', { ascending: false })
+
+    if (attemptsError) {
+      errorMessage.value = 'Емтихан деректерін жүктеу мүмкін болмады: ' + attemptsError.message
+      loading.value = false
+      return
+    }
+
+    attemptsByStudent = (attempts || []).reduce((map, attempt) => {
+      const list = map.get(attempt.student_id) || []
+      list.push(attempt)
+      map.set(attempt.student_id, list)
+      return map
+    }, new Map())
+  }
+
+  students.value = (profiles || []).map((p) => {
+    const attempts = attemptsByStudent.get(p.id) || []
+    const latest = attempts[0]
+    let status = 'Басталмаған'
+    if (latest) status = latest.status === 'in_progress' ? 'Өтіп жатыр' : 'Аяқталды'
+
+    return {
+      id: p.id,
+      full_name: p.full_name,
+      group_name: p.group_name || '—',
+      phone: p.phone || '—',
+      attempts_count: attempts.length,
+      last_score: latest?.total_score ?? null,
+      cefr_level: latest?.cefr_level ?? null,
+      last_attempt_id: latest?.id ?? null,
+      status,
+    }
+  })
+
+  loading.value = false
+}
+
+onMounted(loadStudents)
+
+const groups = computed(() => ['Барлығы', ...new Set(students.value.map((s) => s.group_name))])
 const statuses = ['Барлығы', 'Басталмаған', 'Өтіп жатыр', 'Аяқталды']
 
 const filteredStudents = computed(() =>
-  students.filter((s) => {
+  students.value.filter((s) => {
     const matchesSearch = s.full_name.toLowerCase().includes(search.value.toLowerCase())
     const matchesGroup = groupFilter.value === 'Барлығы' || s.group_name === groupFilter.value
     const matchesStatus = statusFilter.value === 'Барлығы' || s.status === statusFilter.value
@@ -46,7 +106,8 @@ const columns = [
 ]
 
 function openStudent(student) {
-  router.push({ name: 'results', params: { attemptId: student.id } })
+  if (!student.last_attempt_id) return
+  router.push({ name: 'results', params: { attemptId: student.last_attempt_id } })
 }
 </script>
 
@@ -56,6 +117,8 @@ function openStudent(student) {
       <h1>Оқушылар</h1>
       <AppButton @click="showAddStudent = true">Оқушы қосу</AppButton>
     </div>
+
+    <p v-if="errorMessage" class="students__error">{{ errorMessage }}</p>
 
     <div class="students__stats">
       <StatCard :value="students.length" label="Барлық оқушылар" />
@@ -75,7 +138,8 @@ function openStudent(student) {
         </select>
       </div>
 
-      <DataTable :columns="columns" :rows="filteredStudents" row-key="id">
+      <p v-if="loading" class="students__loading">Жүктелуде...</p>
+      <DataTable v-else :columns="columns" :rows="filteredStudents" row-key="id">
         <template #cell-cefr_level="{ row }">
           <CefrBadge v-if="row.cefr_level" :level="row.cefr_level" />
           <span v-else>—</span>
@@ -84,7 +148,14 @@ function openStudent(student) {
           {{ row.last_score ?? '—' }}
         </template>
         <template #cell-actions="{ row }">
-          <button class="students__more" @click="openStudent(row)">Толығырақ</button>
+          <button
+            v-if="row.last_attempt_id"
+            class="students__more"
+            @click="openStudent(row)"
+          >
+            Толығырақ
+          </button>
+          <span v-else class="students__more students__more--disabled">—</span>
         </template>
       </DataTable>
     </AppCard>
@@ -106,6 +177,20 @@ function openStudent(student) {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
+}
+
+.students__error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-label);
+}
+
+.students__loading {
+  color: var(--color-text-secondary);
+  padding: 1rem 0;
 }
 
 .students__stats {
@@ -142,6 +227,12 @@ function openStudent(student) {
   font-weight: 700;
   cursor: pointer;
   font-size: var(--fs-label);
+}
+
+.students__more--disabled {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+  cursor: default;
 }
 
 @media (max-width: 1279px) {
