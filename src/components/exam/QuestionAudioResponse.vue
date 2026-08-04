@@ -1,6 +1,13 @@
 <script setup>
 import { ref, onBeforeUnmount, computed } from 'vue'
 
+defineProps({
+  question: {
+    type: Object,
+    required: true,
+  },
+})
+
 const emit = defineEmits(['update:answer'])
 
 const isRecording = ref(false)
@@ -104,6 +111,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="audio-response">
+    <p class="audio-response__text">{{ question.content.text }}</p>
     <div class="audio-response__controls">
       <button v-if="!isRecording" class="audio-response__btn audio-response__btn--record" @click="startRecording">
         {{ previewUrl ? 'Қайта жазу' : 'Жазуды бастау' }}
@@ -131,6 +139,11 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.audio-response__text {
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .audio-response__controls {
