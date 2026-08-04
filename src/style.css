@@ -1,125 +1,103 @@
 :root {
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: light;
+
+  --color-primary-dark: #1f4e4a;
+  --color-primary-dark-hover: #163a37;
+  --color-value-green: #003239;
+  --color-bg: #f6efe6;
+  --color-card: #fbf5ef;
+
+  --color-accent-blue: #3b82c4;
+  --color-accent-green: #5fa05a;
+  --color-accent-orange: #e0a458;
+  --color-accent-purple: #8b6fb3;
+  --color-accent-red: #d9776b;
+
+  --color-text: #1f2937;
+  --color-text-secondary: #6b7280;
+  --color-border: #e5ddc8;
+  --color-input-bg: #f5f2ea;
+
+  --font-heading: 'Inter', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --fs-h1: 36px;
+  --fs-h2: 21px;
+  --fs-body: 15px;
+  --fs-label: 13px;
+
+  --radius-card: 18px;
+  --radius-control: 10px;
+  --shadow-card: 0 4px 24px rgba(31, 78, 74, 0.08);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: #f5f6f8;
-  color: #1a1a1a;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  -webkit-font-smoothing: antialiased;
 }
 
-#app {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 2rem 1.25rem 4rem;
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  margin: 0;
 }
 
 h1 {
-  font-size: 1.5rem;
-  margin-bottom: 0.25rem;
+  font-size: var(--fs-h1);
+  line-height: 1.15;
 }
 
-.subtitle {
-  color: #666;
-  margin-top: 0;
-  margin-bottom: 2rem;
-  font-size: 0.9rem;
+h2 {
+  font-size: var(--fs-h2);
+  line-height: 1.3;
 }
 
-section {
-  background: #fff;
-  border: 1px solid #e2e4e8;
-  border-radius: 10px;
-  padding: 1.5rem;
-  margin-bottom: 1.75rem;
+p {
+  margin: 0;
 }
 
-section h2 {
-  margin-top: 0;
-  font-size: 1.1rem;
+a {
+  color: var(--color-primary-dark);
 }
 
-button {
-  font: inherit;
-  border: none;
-  border-radius: 6px;
-  padding: 0.55rem 1.1rem;
-  cursor: pointer;
+label {
+  font-size: var(--fs-label);
+  color: var(--color-text-secondary);
   font-weight: 600;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #1d4ed8;
-}
-
-.btn-danger {
-  background: #dc2626;
-  color: #fff;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background: #b91c1c;
-}
-
-.btn-secondary {
-  background: #e5e7eb;
-  color: #111;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: #d1d5db;
-}
-
-.error-box {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #991b1b;
-  padding: 0.65rem 0.9rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  margin-top: 0.75rem;
-}
-
-.hint-box {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #92400e;
-  padding: 0.65rem 0.9rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
 }
 
-th, td {
+th,
+td {
   text-align: left;
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid #eee;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
 }
 
 th {
-  color: #555;
+  color: var(--color-text-secondary);
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: var(--fs-label);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 audio {
@@ -127,106 +105,43 @@ audio {
   max-width: 220px;
 }
 
-.timer {
-  font-variant-numeric: tabular-nums;
-  font-size: 1.4rem;
-  font-weight: 700;
+/* ------- decor placeholder zones -------
+   Заменяются на background-image/img, когда появится графика.
+   Пока — сплошной цвет из палитры, чтобы был виден контур зоны. */
+[data-decor-zone] {
+  background: var(--color-primary-dark);
+  background-size: cover;
+  background-position: center;
 }
 
-.rec-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #dc2626;
-  margin-right: 6px;
-  animation: pulse 1s infinite;
+[data-decor-zone='login-corner-tl'],
+[data-decor-zone='login-corner-tr'] {
+  background: var(--color-accent-orange);
+  opacity: 0.18;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+[data-decor-zone='login-yurt-photo'] {
+  background: linear-gradient(160deg, var(--color-primary-dark), #12332f);
+  border-radius: var(--radius-card);
 }
 
-.recorder-controls {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
+[data-decor-zone='exam-border-frame'] {
+  background: var(--color-accent-orange);
+  opacity: 0.12;
 }
 
-.preview-row {
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
+[data-decor-zone='exam-listening-photo'] {
+  background: linear-gradient(160deg, var(--color-primary-dark), #12332f);
+  border-radius: var(--radius-control);
 }
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+[data-decor-zone='sidebar-logo-mark'] {
+  background: transparent;
 }
 
-.modal-box {
-  background: #fff;
-  border-radius: 10px;
-  padding: 1.75rem;
-  max-width: 420px;
-  width: 90%;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-}
-
-.modal-box h3 {
-  margin-top: 0;
-}
-
-.modal-actions {
-  margin-top: 1.25rem;
-  text-align: right;
-}
-
-.status-line {
-  font-size: 0.8rem;
-  color: #888;
-  margin-top: 0.5rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #15161a;
-    color: #e6e6e6;
-  }
-  section {
-    background: #1e1f24;
-    border-color: #2c2d33;
-  }
-  th, td {
-    border-color: #2c2d33;
-  }
-  th {
-    color: #999;
-  }
-  .subtitle {
-    color: #999;
-  }
-  .btn-secondary {
-    background: #2c2d33;
-    color: #eee;
-  }
-  .btn-secondary:hover:not(:disabled) {
-    background: #3a3b42;
-  }
-  .modal-box {
-    background: #1e1f24;
-    color: #eee;
-  }
-  .status-line {
-    color: #888;
+@media (max-width: 767px) {
+  :root {
+    --fs-h1: 26px;
+    --fs-h2: 18px;
   }
 }
