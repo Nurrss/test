@@ -241,12 +241,40 @@ values
 on conflict (id) do nothing;
 
 -- студент может загрузить запись только в папку своего attempt_id
+-- (LIKE-сравнение вместо storage.foldername()[1] — надёжнее для путей вида
+-- "{attempt_id}/{question_id}.webm", проверено вживую после первого запуска).
+-- SELECT/UPDATE-политики тоже нужны студенту: клиент грузит файл с upsert:true,
+-- и Storage API в этом случае проверяет доступ на обновление, а не только insert.
 create policy "student upload own recording" on storage.objects
   for insert
   with check (
     bucket_id = 'speaking-recordings'
-    and (storage.foldername(name))[1] in (
-      select id::text from exam_attempts where student_id = auth.uid()
+    and exists (
+      select 1 from exam_attempts a
+      where a.student_id = auth.uid()
+        and name like a.id::text || '/%'
+    )
+  );
+
+create policy "student read own recording" on storage.objects
+  for select
+  using (
+    bucket_id = 'speaking-recordings'
+    and exists (
+      select 1 from exam_attempts a
+      where a.student_id = auth.uid()
+        and name like a.id::text || '/%'
+    )
+  );
+
+create policy "student update own recording" on storage.objects
+  for update
+  using (
+    bucket_id = 'speaking-recordings'
+    and exists (
+      select 1 from exam_attempts a
+      where a.student_id = auth.uid()
+        and name like a.id::text || '/%'
     )
   );
 

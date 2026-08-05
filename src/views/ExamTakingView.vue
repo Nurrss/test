@@ -198,15 +198,17 @@ function startSectionTimer() {
 }
 
 // ------- сохранение ответа -------
+// Возвращает false при реальной ошибке сохранения — вызывающий код должен
+// остановить переход к следующему вопросу/разделу, иначе ответ теряется молча.
 async function saveCurrentAnswer() {
   const question = currentQuestion.value
-  if (!question || !attempt.value) return
+  if (!question || !attempt.value) return true
   const value = answers.value[question.id]
-  if (value === undefined) return
+  if (value === undefined) return true
 
   try {
     if (question.question_type === 'audio_response') {
-      if (!value?.audioBlob) return
+      if (!value?.audioBlob) return true
       const path = `${attempt.value.id}/${question.id}.webm`
       const { error: uploadError } = await supabase.storage
         .from('speaking-recordings')
@@ -229,8 +231,11 @@ async function saveCurrentAnswer() {
       })
       if (rpcError) throw rpcError
     }
+    loadError.value = ''
+    return true
   } catch (err) {
     loadError.value = 'Жауапты сақтау мүмкін болмады: ' + (err?.message || err)
+    return false
   }
 }
 
@@ -251,7 +256,8 @@ async function goToNextSection() {
 }
 
 async function handleNext() {
-  await saveCurrentAnswer()
+  const saved = await saveCurrentAnswer()
+  if (!saved) return
   if (!isLastQuestionInSection.value) {
     currentQuestionIndex.value += 1
     return
@@ -260,7 +266,8 @@ async function handleNext() {
 }
 
 async function handlePrev() {
-  await saveCurrentAnswer()
+  const saved = await saveCurrentAnswer()
+  if (!saved) return
   if (currentQuestionIndex.value > 0) currentQuestionIndex.value -= 1
 }
 
