@@ -34,6 +34,7 @@ as $$
 declare
   v_assignment exam_assignments;
   v_existing exam_attempts;
+  v_existing_found boolean;
   v_result exam_attempts;
 begin
   select * into v_assignment
@@ -46,17 +47,22 @@ begin
     raise exception 'NO_ASSIGNMENT';
   end if;
 
+  -- Важно: "v_existing is not null" здесь не годится — для составного (row) типа
+  -- она истинна только если ВСЕ поля не null, а total_score/graded_at и т.п. у
+  -- ещё не оценённой попытки как раз null, из-за чего ветка никогда не срабатывала.
+  -- FOUND — надёжный флаг "нашёлся ли хоть один ряд" для последнего SELECT INTO.
   select * into v_existing
   from exam_attempts
   where student_id = auth.uid() and variant_id = v_assignment.variant_id
   order by created_at desc
   limit 1;
+  v_existing_found := found;
 
-  if v_existing is not null and v_existing.status = 'in_progress' then
+  if v_existing_found and v_existing.status = 'in_progress' then
     return v_existing;
   end if;
 
-  if v_existing is not null then
+  if v_existing_found then
     if not v_assignment.allow_retake then
       raise exception 'ALREADY_SUBMITTED';
     end if;

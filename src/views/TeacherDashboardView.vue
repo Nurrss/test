@@ -119,7 +119,11 @@ onMounted(loadDashboard)
       </AppCard>
     </div>
 
-    <AddStudentModal :visible="showAddStudent" @close="showAddStudent = false" />
+    <AddStudentModal
+      :visible="showAddStudent"
+      @close="showAddStudent = false"
+      @created="loadDashboard"
+    />
   </div>
 </template>
 

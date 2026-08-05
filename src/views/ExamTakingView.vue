@@ -1,7 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { supabase } from '../lib/supabase'
-import { useAuthStore } from '../stores/auth'
 import ExamProgressSidebar from '../components/exam/ExamProgressSidebar.vue'
 import QuestionMultipleChoice from '../components/exam/QuestionMultipleChoice.vue'
 import QuestionTextResponse from '../components/exam/QuestionTextResponse.vue'
@@ -9,8 +8,6 @@ import QuestionAudioResponse from '../components/exam/QuestionAudioResponse.vue'
 import TabWarningModal from '../components/exam/TabWarningModal.vue'
 import AppButton from '../components/shared/AppButton.vue'
 import AppCard from '../components/shared/AppCard.vue'
-
-const auth = useAuthStore()
 
 const SECTION_ORDER = ['listening', 'reading', 'writing', 'speaking']
 const SECTION_LABELS = { listening: 'Listening', reading: 'Reading', writing: 'Writing', speaking: 'Speaking' }
@@ -63,36 +60,37 @@ function questionComponent(question) {
 }
 
 // ------- загрузка/создание попытки -------
+// resolve_attempt() — атомарный RPC (SECURITY DEFINER): находит назначение,
+// резюмирует активную попытку, начинает разрешённую пересдачу или создаёт
+// первую попытку. Заменяет прежнюю последовательность из отдельных select+insert.
 async function loadExam() {
   loading.value = true
   loadError.value = ''
-  const studentId = auth.session?.user?.id
+  noAssignment.value = false
+  alreadySubmitted.value = false
 
-  const { data: assignment, error: assignmentError } = await supabase
-    .from('exam_assignments')
-    .select('variant_id')
-    .eq('student_id', studentId)
-    .order('assigned_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const { data: resolved, error: resolveError } = await supabase.rpc('resolve_attempt')
 
-  if (assignmentError) {
-    loadError.value = 'Тағайындалған емтиханды тексеру мүмкін болмады: ' + assignmentError.message
+  if (resolveError) {
+    if (resolveError.message === 'NO_ASSIGNMENT') {
+      noAssignment.value = true
+    } else if (resolveError.message === 'ALREADY_SUBMITTED') {
+      alreadySubmitted.value = true
+    } else {
+      loadError.value = 'Талпынысты бастау мүмкін болмады: ' + resolveError.message
+    }
     loading.value = false
     return
   }
-  if (!assignment) {
-    noAssignment.value = true
-    loading.value = false
-    return
-  }
+
+  attempt.value = resolved
 
   const [{ data: variant, error: variantError }, { data: questions, error: questionsError }] = await Promise.all([
-    supabase.from('exam_variants').select('*').eq('id', assignment.variant_id).single(),
+    supabase.from('exam_variants').select('*').eq('id', resolved.variant_id).single(),
     supabase
       .from('questions')
       .select('*')
-      .eq('variant_id', assignment.variant_id)
+      .eq('variant_id', resolved.variant_id)
       .order('section')
       .order('order_index'),
   ])
@@ -130,53 +128,16 @@ async function loadExam() {
     }
   )
 
-  const { data: existingAttempt, error: attemptError } = await supabase
-    .from('exam_attempts')
-    .select('*')
-    .eq('student_id', studentId)
-    .eq('variant_id', assignment.variant_id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const resumeIndex = sectionsData.value.findIndex((s) => s.key === resolved.current_section)
+  currentSectionIndex.value = resumeIndex >= 0 ? resumeIndex : 0
 
-  if (attemptError) {
-    loadError.value = 'Талпынысты тексеру мүмкін болмады: ' + attemptError.message
-    loading.value = false
-    return
-  }
+  const { data: previousAnswers } = await supabase
+    .from('student_answers')
+    .select('question_id, answer')
+    .eq('attempt_id', resolved.id)
 
-  if (existingAttempt && existingAttempt.status !== 'in_progress') {
-    alreadySubmitted.value = true
-    loading.value = false
-    return
-  }
-
-  if (existingAttempt) {
-    attempt.value = existingAttempt
-    const resumeIndex = sectionsData.value.findIndex((s) => s.key === existingAttempt.current_section)
-    currentSectionIndex.value = resumeIndex >= 0 ? resumeIndex : 0
-
-    const { data: previousAnswers } = await supabase
-      .from('student_answers')
-      .select('question_id, answer')
-      .eq('attempt_id', existingAttempt.id)
-
-    for (const row of previousAnswers || []) {
-      if (row.answer !== null) answers.value[row.question_id] = row.answer
-    }
-  } else {
-    const { data: created, error: createError } = await supabase
-      .from('exam_attempts')
-      .insert({ student_id: studentId, variant_id: assignment.variant_id, current_section: sectionsData.value[0]?.key })
-      .select()
-      .single()
-
-    if (createError) {
-      loadError.value = 'Талпынысты бастау мүмкін болмады: ' + createError.message
-      loading.value = false
-      return
-    }
-    attempt.value = created
+  for (const row of previousAnswers || []) {
+    if (row.answer !== null) answers.value[row.question_id] = row.answer
   }
 
   loading.value = false

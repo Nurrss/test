@@ -19,6 +19,8 @@ const student = ref(null)
 const sectionScores = ref([])
 const progressPoints = ref([])
 const comparisonRows = ref([])
+const allowingRetake = ref(false)
+const retakeMessage = ref('')
 
 const sectionMeta = {
   listening: { label: 'Listening', color: 'var(--color-accent-blue)' },
@@ -100,12 +102,15 @@ async function loadResults(attemptId) {
     full_name: attempt.profiles?.full_name || '—',
     group_name: attempt.profiles?.group_name || '—',
     student_id: attempt.student_id,
+    variant_id: attempt.variant_id,
     variant_name: attempt.exam_variants?.name || '—',
     total_score: displayScore,
     max_score: maxScore || 1,
     cefr_level: cefrLevel,
     graded: attempt.status === 'graded',
+    status: attempt.status,
   }
+  retakeMessage.value = ''
 
   const [{ data: history }, { data: groupmates }] = await Promise.all([
     supabase
@@ -146,6 +151,23 @@ async function loadResults(attemptId) {
   loading.value = false
 }
 
+async function allowRetake() {
+  if (!student.value) return
+  allowingRetake.value = true
+  retakeMessage.value = ''
+
+  const { error } = await supabase
+    .from('exam_assignments')
+    .update({ allow_retake: true })
+    .eq('student_id', student.value.student_id)
+    .eq('variant_id', student.value.variant_id)
+
+  allowingRetake.value = false
+  retakeMessage.value = error
+    ? 'Рұқсат беру мүмкін болмады: ' + error.message
+    : 'Қайта тапсыруға рұқсат берілді'
+}
+
 onMounted(() => loadResults(route.params.attemptId))
 watch(
   () => route.params.attemptId,
@@ -178,6 +200,15 @@ watch(
           <p v-if="!student.graded" class="results__pending-note">
             Writing/Speaking әлі толық бағаланбаған — балл алдын ала есептелген.
           </p>
+          <button
+            v-if="student.status !== 'in_progress'"
+            class="results__retake-btn"
+            :disabled="allowingRetake"
+            @click="allowRetake"
+          >
+            {{ allowingRetake ? 'Берілуде...' : 'Қайта тапсыруға рұқсат беру' }}
+          </button>
+          <p v-if="retakeMessage" class="results__retake-message">{{ retakeMessage }}</p>
         </AppCard>
 
         <AppCard class="results__sections">
@@ -265,6 +296,30 @@ watch(
 }
 
 .results__pending-note {
+  margin-top: 0.5rem;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.results__retake-btn {
+  margin-top: 0.9rem;
+  background: none;
+  border: 1px solid var(--color-primary-dark);
+  color: var(--color-primary-dark);
+  border-radius: var(--radius-control);
+  padding: 0.55rem 1rem;
+  font-family: var(--font-body);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.results__retake-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.results__retake-message {
   margin-top: 0.5rem;
   font-size: 12px;
   color: var(--color-text-secondary);

@@ -8,14 +8,34 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
+// Браузер шлёт CORS-preflight (OPTIONS) перед реальным POST с Authorization-хедером —
+// без этих хедеров на всех ответах (включая OPTIONS) fetch падает в браузере ещё до
+// того, как POST вообще уходит на сервер.
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+function jsonResponse(body, status) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 })
+    return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 
   const authHeader = req.headers.get('Authorization')
   if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'Кіру талап етіледі' }), { status: 401 })
+    return jsonResponse({ error: 'Кіру талап етіледі' }, 401)
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -32,7 +52,7 @@ Deno.serve(async (req) => {
   } = await callerClient.auth.getUser()
 
   if (userError || !user) {
-    return new Response(JSON.stringify({ error: 'Сессия жарамсыз' }), { status: 401 })
+    return jsonResponse({ error: 'Сессия жарамсыз' }, 401)
   }
 
   // Admin-клиент с service role — обходит RLS, только для проверки роли и создания.
@@ -45,15 +65,13 @@ Deno.serve(async (req) => {
     .single()
 
   if (callerProfile?.role !== 'teacher') {
-    return new Response(JSON.stringify({ error: 'Тек мұғалім оқушы қоса алады' }), { status: 403 })
+    return jsonResponse({ error: 'Тек мұғалім оқушы қоса алады' }, 403)
   }
 
   const { full_name, phone, group_name, password } = await req.json()
 
   if (!full_name || !phone || !password) {
-    return new Response(JSON.stringify({ error: 'Аты-жөні, телефон және құпия сөз міндетті' }), {
-      status: 400,
-    })
+    return jsonResponse({ error: 'Аты-жөні, телефон және құпия сөз міндетті' }, 400)
   }
 
   // Синтетический email из телефона — та же логика, что studentEmailFromPhone()
@@ -68,9 +86,7 @@ Deno.serve(async (req) => {
   })
 
   if (createError || !created?.user) {
-    return new Response(JSON.stringify({ error: createError?.message || 'Тіркеу сәтсіз аяқталды' }), {
-      status: 400,
-    })
+    return jsonResponse({ error: createError?.message || 'Тіркеу сәтсіз аяқталды' }, 400)
   }
 
   const { error: profileError } = await adminClient.from('profiles').insert({
@@ -84,11 +100,8 @@ Deno.serve(async (req) => {
   if (profileError) {
     // Профиль сақталмаса — auth-аккаунтты да қалдырмаймыз (жетім жазба болмасын).
     await adminClient.auth.admin.deleteUser(created.user.id)
-    return new Response(JSON.stringify({ error: profileError.message }), { status: 400 })
+    return jsonResponse({ error: profileError.message }, 400)
   }
 
-  return new Response(JSON.stringify({ id: created.user.id }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return jsonResponse({ id: created.user.id }, 200)
 })

@@ -1,4 +1,6 @@
 <script setup>
+import { ref } from 'vue'
+import { supabase } from '../../lib/supabase'
 import AppInput from './AppInput.vue'
 import AppButton from './AppButton.vue'
 
@@ -9,27 +11,75 @@ defineProps({
   },
 })
 
-defineEmits(['close'])
+const emit = defineEmits(['close', 'created'])
+
+const fullName = ref('')
+const phone = ref('')
+const groupName = ref('')
+const password = ref('')
+const isSaving = ref(false)
+const errorMessage = ref('')
+
+function resetForm() {
+  fullName.value = ''
+  phone.value = ''
+  groupName.value = ''
+  password.value = ''
+  errorMessage.value = ''
+}
+
+function handleClose() {
+  resetForm()
+  emit('close')
+}
+
+async function handleSubmit() {
+  errorMessage.value = ''
+
+  if (!fullName.value || !phone.value || !password.value) {
+    errorMessage.value = 'Аты-жөні, телефон және құпия сөз міндетті'
+    return
+  }
+
+  isSaving.value = true
+  const { data, error } = await supabase.functions.invoke('create-student', {
+    body: {
+      full_name: fullName.value,
+      phone: phone.value,
+      group_name: groupName.value,
+      password: password.value,
+    },
+  })
+  isSaving.value = false
+
+  if (error || data?.error) {
+    errorMessage.value = 'Қосу мүмкін болмады: ' + (data?.error || error.message)
+    return
+  }
+
+  resetForm()
+  emit('created')
+  emit('close')
+}
 </script>
 
 <template>
-  <div v-if="visible" class="add-student-backdrop" @click.self="$emit('close')">
+  <div v-if="visible" class="add-student-backdrop" @click.self="handleClose">
     <div class="add-student-box">
       <h3>Оқушы қосу</h3>
-      <form class="add-student-form" @submit.prevent="$emit('close')">
-        <AppInput label="Аты-жөні" placeholder="Асан Асанов" />
-        <AppInput label="Телефон нөмірі" type="tel" placeholder="+7 700 000 00 00" />
-        <AppInput label="Топ" placeholder="10А" />
-        <AppInput label="Бастапқы құпия сөз" type="password" placeholder="••••••••" />
+      <form class="add-student-form" @submit.prevent="handleSubmit">
+        <AppInput v-model="fullName" label="Аты-жөні" placeholder="Асан Асанов" />
+        <AppInput v-model="phone" label="Телефон нөмірі" type="tel" placeholder="+7 700 000 00 00" />
+        <AppInput v-model="groupName" label="Топ" placeholder="10А" />
+        <AppInput v-model="password" label="Бастапқы құпия сөз" type="password" placeholder="••••••••" />
 
-        <p class="add-student-note">
-          Оқушыны нақты тіркеу Supabase Admin API арқылы жасалады (келесі кезең) —
-          бұл форма әзірге тек интерфейс.
-        </p>
+        <p v-if="errorMessage" class="add-student-error">{{ errorMessage }}</p>
 
         <div class="add-student-actions">
-          <AppButton variant="secondary" type="button" @click="$emit('close')">Бас тарту</AppButton>
-          <AppButton type="submit" disabled>Сақтау</AppButton>
+          <AppButton variant="secondary" type="button" @click="handleClose">Бас тарту</AppButton>
+          <AppButton type="submit" :disabled="isSaving">
+            {{ isSaving ? 'Қосылуда...' : 'Сақтау' }}
+          </AppButton>
         </div>
       </form>
     </div>
@@ -67,9 +117,9 @@ defineEmits(['close'])
   gap: 0.9rem;
 }
 
-.add-student-note {
+.add-student-error {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: var(--color-accent-red);
   line-height: 1.5;
 }
 

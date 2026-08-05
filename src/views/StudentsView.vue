@@ -9,9 +9,11 @@ import StatCard from '../components/shared/StatCard.vue'
 import DataTable from '../components/shared/DataTable.vue'
 import CefrBadge from '../components/shared/CefrBadge.vue'
 import AddStudentModal from '../components/shared/AddStudentModal.vue'
+import AssignExamModal from '../components/dashboard/AssignExamModal.vue'
 
 const router = useRouter()
 const showAddStudent = ref(false)
+const assignTarget = ref(null)
 const search = ref('')
 const groupFilter = ref('Барлығы')
 const statusFilter = ref('Барлығы')
@@ -109,6 +111,10 @@ function openStudent(student) {
   if (!student.last_attempt_id) return
   router.push({ name: 'results', params: { attemptId: student.last_attempt_id } })
 }
+
+function openAssign(student) {
+  assignTarget.value = student
+}
 </script>
 
 <template>
@@ -148,19 +154,32 @@ function openStudent(student) {
           {{ row.last_score ?? '—' }}
         </template>
         <template #cell-actions="{ row }">
-          <button
-            v-if="row.last_attempt_id"
-            class="students__more"
-            @click="openStudent(row)"
-          >
-            Толығырақ
-          </button>
-          <span v-else class="students__more students__more--disabled">—</span>
+          <div class="students__actions">
+            <button
+              v-if="row.last_attempt_id"
+              class="students__more"
+              @click="openStudent(row)"
+            >
+              Толығырақ
+            </button>
+            <button class="students__more" @click="openAssign(row)">Тағайындау</button>
+          </div>
         </template>
       </DataTable>
     </AppCard>
 
-    <AddStudentModal :visible="showAddStudent" @close="showAddStudent = false" />
+    <AddStudentModal
+      :visible="showAddStudent"
+      @close="showAddStudent = false"
+      @created="loadStudents"
+    />
+
+    <AssignExamModal
+      :visible="!!assignTarget"
+      :student="assignTarget"
+      @close="assignTarget = null"
+      @assigned="loadStudents"
+    />
   </div>
 </template>
 
@@ -220,6 +239,11 @@ function openStudent(student) {
   padding: 0.7rem 0.9rem;
 }
 
+.students__actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
 .students__more {
   background: none;
   border: none;
@@ -227,12 +251,7 @@ function openStudent(student) {
   font-weight: 700;
   cursor: pointer;
   font-size: var(--fs-label);
-}
-
-.students__more--disabled {
-  color: var(--color-text-secondary);
-  font-weight: 400;
-  cursor: default;
+  white-space: nowrap;
 }
 
 @media (max-width: 1279px) {
