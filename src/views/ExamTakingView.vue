@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { supabase } from '../lib/supabase'
 import ExamProgressSidebar from '../components/exam/ExamProgressSidebar.vue'
 import QuestionMultipleChoice from '../components/exam/QuestionMultipleChoice.vue'
@@ -8,6 +9,8 @@ import QuestionAudioResponse from '../components/exam/QuestionAudioResponse.vue'
 import TabWarningModal from '../components/exam/TabWarningModal.vue'
 import AppButton from '../components/shared/AppButton.vue'
 import AppCard from '../components/shared/AppCard.vue'
+
+const router = useRouter()
 
 const SECTION_ORDER = ['listening', 'reading', 'writing', 'speaking']
 const SECTION_LABELS = { listening: 'Listening', reading: 'Reading', writing: 'Writing', speaking: 'Speaking' }
@@ -246,6 +249,10 @@ function setAnswer(value) {
   answers.value[currentQuestion.value.id] = value
 }
 
+function goHome() {
+  router.push({ name: 'student-home' })
+}
+
 // --- antileave: visibilitychange + window blur/focus, лог в tab_events ---
 async function logTabEvent(eventType) {
   console.log('[tab-event]', eventType, new Date().toISOString())
@@ -299,11 +306,13 @@ onBeforeUnmount(() => {
     <div v-else-if="noAssignment" class="exam-taking__submitted">
       <h1>Емтихан тағайындалмаған</h1>
       <p>Сізге әлі емтихан нұсқасы тағайындалмаған. Мұғаліммен байланысыңыз.</p>
+      <AppButton class="exam-taking__home-btn" variant="secondary" @click="goHome">Басты бетке оралу</AppButton>
     </div>
 
     <div v-else-if="alreadySubmitted" class="exam-taking__submitted">
       <h1>Сіз бұл емтиханды тапсырдыңыз</h1>
       <p>Нәтижелер мұғалім тексергеннен кейін жарияланады.</p>
+      <AppButton class="exam-taking__home-btn" variant="secondary" @click="goHome">Басты бетке оралу</AppButton>
     </div>
 
     <template v-else-if="!examSubmitted">
@@ -357,6 +366,7 @@ onBeforeUnmount(() => {
     <div v-else class="exam-taking__submitted">
       <h1>Жіберілді</h1>
       <p>Емтихан жауаптарыңыз қабылданды. Нәтижелер мұғалім тексергеннен кейін жарияланады.</p>
+      <AppButton class="exam-taking__home-btn" variant="secondary" @click="goHome">Басты бетке оралу</AppButton>
     </div>
 
     <TabWarningModal :visible="showTabWarning" @close="showTabWarning = false" />
@@ -466,6 +476,10 @@ onBeforeUnmount(() => {
 .exam-taking__submitted p {
   margin-top: 0.75rem;
   color: var(--color-text-secondary);
+}
+
+.exam-taking__home-btn {
+  margin-top: 1.5rem;
 }
 
 @media (max-width: 1023px) {

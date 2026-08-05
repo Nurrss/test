@@ -11,38 +11,49 @@ const routes = [
   {
     path: '/',
     component: AppShell,
-    meta: { role: 'teacher' },
     children: [
       { path: '', redirect: { name: 'dashboard' } },
       {
         path: 'dashboard',
         name: 'dashboard',
         component: () => import('../views/TeacherDashboardView.vue'),
-        meta: { title: 'Мұғалімнің панелі' },
+        meta: { title: 'Мұғалімнің панелі', role: 'teacher' },
       },
       {
         path: 'students',
         name: 'students',
         component: () => import('../views/StudentsView.vue'),
-        meta: { title: 'Оқушылар' },
+        meta: { title: 'Оқушылар', role: 'teacher' },
       },
       {
         path: 'grading',
         name: 'grading',
         component: () => import('../views/GradingQueueView.vue'),
-        meta: { title: 'Бағалау' },
+        meta: { title: 'Бағалау', role: 'teacher' },
       },
       {
         path: 'results/:attemptId?',
         name: 'results',
         component: () => import('../views/ResultsView.vue'),
-        meta: { title: 'Нәтижелер және статистика' },
+        meta: { title: 'Нәтижелер және статистика', role: 'teacher' },
       },
       {
         path: 'settings',
         name: 'settings',
         component: () => import('../views/SettingsView.vue'),
-        meta: { title: 'Параметрлер' },
+        meta: { title: 'Параметрлер', role: 'teacher' },
+      },
+      {
+        path: 'home',
+        name: 'student-home',
+        component: () => import('../views/StudentHomeView.vue'),
+        meta: { title: 'Басты бет', role: 'student' },
+      },
+      {
+        path: 'my-results/:attemptId?',
+        name: 'my-results',
+        component: () => import('../views/StudentResultsView.vue'),
+        meta: { title: 'Менің нәтижелерім', role: 'student' },
       },
     ],
   },
@@ -61,7 +72,7 @@ const router = createRouter({
 })
 
 function homeRouteForRole(role) {
-  return role === 'student' ? { name: 'exam' } : { name: 'dashboard' }
+  return role === 'student' ? { name: 'student-home' } : { name: 'dashboard' }
 }
 
 router.beforeEach(async (to) => {
@@ -76,7 +87,7 @@ router.beforeEach(async (to) => {
     return homeRouteForRole(auth.role)
   }
 
-  const requiredRole = to.matched.find((record) => record.meta?.role)?.meta?.role
+  const requiredRole = to.meta?.role
   if (requiredRole && auth.role !== requiredRole) {
     const home = homeRouteForRole(auth.role)
     // Если профиль не подгрузился (role=null) и запасной роут совпадает с

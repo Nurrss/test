@@ -57,7 +57,7 @@ async function logout() {
         </button>
 
         <div v-if="menuOpen" class="header__dropdown">
-          <router-link :to="{ name: 'settings' }" @click="menuOpen = false">
+          <router-link v-if="auth.role === 'teacher'" :to="{ name: 'settings' }" @click="menuOpen = false">
             Параметрлер
           </router-link>
           <button @click="logout">Шығу</button>

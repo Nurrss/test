@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 
@@ -14,13 +15,20 @@ defineEmits(['close'])
 const router = useRouter()
 const auth = useAuthStore()
 
-const navItems = [
+const teacherNavItems = [
   { to: { name: 'dashboard' }, label: 'Басты бет', icon: 'fa-solid fa-house' },
   { to: { name: 'students' }, label: 'Оқушылар', icon: 'fa-solid fa-user-graduate' },
   { to: { name: 'results' }, label: 'Нәтижелер', icon: 'fa-solid fa-chart-column' },
   { to: { name: 'grading' }, label: 'Бағалау', icon: 'fa-solid fa-square-check' },
   { to: { name: 'settings' }, label: 'Параметрлер', icon: 'fa-solid fa-gear' },
 ]
+
+const studentNavItems = [
+  { to: { name: 'student-home' }, label: 'Басты бет', icon: 'fa-solid fa-house' },
+  { to: { name: 'my-results' }, label: 'Менің нәтижелерім', icon: 'fa-solid fa-chart-column' },
+]
+
+const navItems = computed(() => (auth.role === 'student' ? studentNavItems : teacherNavItems))
 
 async function logout() {
   await auth.signOut()
