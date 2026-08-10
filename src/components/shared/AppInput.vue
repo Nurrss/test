@@ -53,9 +53,10 @@ const resolvedType = computed(() => {
         v-if="isPassword"
         type="button"
         class="app-input__toggle"
+        :aria-label="showPassword ? 'Құпия сөзді жасыру' : 'Құпия сөзді көрсету'"
         @click="showPassword = !showPassword"
       >
-        {{ showPassword ? 'Жасыру' : 'Көрсету' }}
+        <i class="fa-solid" :class="showPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
       </button>
     </div>
     <p v-if="error" class="app-input__error">{{ error }}</p>
@@ -98,14 +99,15 @@ input:disabled {
 
 .app-input__toggle {
   position: absolute;
-  right: 0.6rem;
+  right: 0.8rem;
   background: none;
   border: none;
   color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 15px;
   cursor: pointer;
-  padding: 0.2rem 0.4rem;
+  padding: 0.2rem 0.3rem;
+  display: flex;
+  align-items: center;
 }
 
 .app-input__error {

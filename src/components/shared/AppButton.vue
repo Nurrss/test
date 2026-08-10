@@ -16,9 +16,9 @@ defineProps({
     type: Boolean,
     default: false,
   },
-})
+});
 
-defineEmits(['click'])
+defineEmits(['click']);
 </script>
 
 <template>
@@ -42,7 +42,9 @@ defineEmits(['click'])
   border-radius: var(--radius-control);
   padding: 0.7rem 1.4rem;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .app-button:disabled {
@@ -55,6 +57,8 @@ defineEmits(['click'])
 }
 
 .app-button--primary {
+  position: relative;
+  overflow: hidden;
   background: var(--color-primary-dark);
   color: #fff;
 }
@@ -63,13 +67,51 @@ defineEmits(['click'])
   background: var(--color-primary-dark-hover);
 }
 
+/* Vector.svg оюы — осы бес айнымалыны өзгерту арқылы реттеледі:
+   size = ою мөлшері, offset = шеттен қашықтық (теріс мән — сыртқа шығады),
+   rotate = бұрылу бұрышы. */
+.app-button--primary {
+  --ornament-size: 55px;
+  --ornament-offset: -20px;
+  --ornament-rotate: 90deg;
+}
+
+.app-button--primary::before,
+.app-button--primary::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: var(--ornament-size);
+  height: var(--ornament-size);
+  -webkit-mask-image: url('../../assets/photos/vector.svg');
+  mask-image: url('../../assets/photos/vector.svg');
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  background-color: var(--color-gold);
+  pointer-events: none;
+}
+
+.app-button--primary::before {
+  left: var(--ornament-offset);
+  transform: translateY(-50%) rotate(calc(-1 * var(--ornament-rotate)));
+}
+
+.app-button--primary::after {
+  right: var(--ornament-offset);
+  transform: translateY(-50%) rotate(var(--ornament-rotate));
+}
+
 .app-button--secondary {
   background: var(--color-input-bg);
   color: var(--color-text);
 }
 
 .app-button--secondary:hover:not(:disabled) {
-  background: #e8e2d2;
+  background: var(--color-border);
 }
 
 .app-button--outline {
@@ -79,7 +121,6 @@ defineEmits(['click'])
 }
 
 .app-button--outline:hover:not(:disabled) {
-  background: rgba(31, 78, 74, 0.06);
+  background: rgba(15, 92, 90, 0.06);
 }
-
 </style>

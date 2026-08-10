@@ -7,6 +7,7 @@ import { cefrFromScore } from '../lib/cefr'
 import AppCard from '../components/shared/AppCard.vue'
 import ScoreDonut from '../components/shared/ScoreDonut.vue'
 import CefrBadge from '../components/shared/CefrBadge.vue'
+import cardCorner from '../assets/ornaments/card-frame.png'
 import SectionScoreBars from '../components/results/SectionScoreBars.vue'
 import CefrScaleTable from '../components/results/CefrScaleTable.vue'
 import ProgressChart from '../components/results/ProgressChart.vue'
@@ -119,7 +120,7 @@ async function loadResult(attemptId) {
 
   const maxScore = Object.values(maxBySection).reduce((sum, v) => sum + v, 0)
   const displayScore = attempt.total_score ?? attempt.auto_score ?? 0
-  const cefrLevel = cefrFromScore(displayScore)
+  const cefrLevel = cefrFromScore(displayScore, maxScore)
 
   result.value = {
     variant_name: attempt.exam_variants?.name || '—',
@@ -158,6 +159,7 @@ watch(
     <template v-else>
       <div class="my-results__grid">
         <AppCard class="my-results__score">
+          <img :src="cardCorner" alt="" class="my-results__score-corner" />
           <h2>{{ result.variant_name }}</h2>
           <ScoreDonut
             :score="result.total_score"
@@ -180,7 +182,7 @@ watch(
 
         <AppCard class="my-results__scale">
           <h2>Деңгей шкаласы (CEFR)</h2>
-          <CefrScaleTable :current-level="result.cefr_level" />
+          <CefrScaleTable :current-level="result.cefr_level" :max-score="result.max_score" />
         </AppCard>
       </div>
 
@@ -236,11 +238,23 @@ watch(
 }
 
 .my-results__score {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 0.3rem;
+}
+
+.my-results__score-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 96px;
+  height: auto;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .my-results__donut {

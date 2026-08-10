@@ -1,17 +1,30 @@
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   currentLevel: {
     type: String,
     required: true,
   },
+  maxScore: {
+    type: Number,
+    default: 80,
+  },
 })
 
-const ranges = [
-  { level: 'Pre-A1', range: '0 – 24' },
-  { level: 'A1', range: '25 – 48' },
-  { level: 'A2', range: '49 – 68' },
-  { level: 'Above A2', range: '69 – 80' },
-]
+// Те же проценты, что и src/lib/cefr.js: 30% / 60% / 85% от максимального балла.
+const ranges = computed(() => {
+  const max = props.maxScore || 80
+  const b1 = Math.round(max * 0.3)
+  const b2 = Math.round(max * 0.6)
+  const b3 = Math.round(max * 0.85)
+  return [
+    { level: 'Pre-A1', range: `0 – ${b1}` },
+    { level: 'A1', range: `${b1 + 1} – ${b2}` },
+    { level: 'A2', range: `${b2 + 1} – ${b3}` },
+    { level: 'Above A2', range: `${b3 + 1} – ${max}` },
+  ]
+})
 </script>
 
 <template>
@@ -37,7 +50,7 @@ const ranges = [
 
 <style scoped>
 .cefr-scale__row--current {
-  background: rgba(31, 78, 74, 0.08);
+  background: rgba(15, 92, 90, 0.08);
   font-weight: 700;
 }
 </style>

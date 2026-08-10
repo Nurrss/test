@@ -1,22 +1,25 @@
 :root {
   color-scheme: light;
 
-  --color-primary-dark: #1f4e4a;
-  --color-primary-dark-hover: #163a37;
-  --color-value-green: #003239;
-  --color-bg: #f6efe6;
-  --color-card: #fbf5ef;
+  /* Палитра — english-platform/DESIGN.md (тот же токен-набор, что и assets/tokens.json) */
+  --color-primary-dark: #0f5c5a;
+  --color-primary-dark-hover: #0a4d4b;
+  --color-value-green: var(--color-primary-dark);
+  --color-gold: #d9b16d;
+  --color-gold-soft: #f2e6d0;
+  --color-bg: #faf8f4;
+  --color-card: #ffffff;
 
-  --color-accent-blue: #3b82c4;
-  --color-accent-green: #5fa05a;
-  --color-accent-orange: #e0a458;
-  --color-accent-purple: #8b6fb3;
-  --color-accent-red: #d9776b;
+  --color-accent-blue: #3b82f6;
+  --color-accent-green: #16a34a;
+  --color-accent-orange: #f59e0b;
+  --color-accent-purple: #8b5cf6;
+  --color-accent-red: #dc2626;
 
-  --color-text: #1f2937;
+  --color-text: #1b1b1b;
   --color-text-secondary: #6b7280;
-  --color-border: #e5ddc8;
-  --color-input-bg: #f5f2ea;
+  --color-border: #ece6db;
+  --color-input-bg: #f4f1ea;
 
   --font-heading: 'Inter', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-body: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -26,9 +29,9 @@
   --fs-body: 15px;
   --fs-label: 13px;
 
-  --radius-card: 18px;
-  --radius-control: 10px;
-  --shadow-card: 0 4px 24px rgba(31, 78, 74, 0.08);
+  --radius-card: 24px;
+  --radius-control: 16px;
+  --shadow-card: 0 4px 16px rgba(15, 92, 90, 0.07);
 }
 
 * {
@@ -42,6 +45,9 @@ body {
   font-family: var(--font-body);
   font-size: var(--fs-body);
   -webkit-font-smoothing: antialiased;
+  /* Кнопка оюлары әдейі шеттен шығып тұрады (AppButton.vue, --ornament-*) —
+     беттің өз шетінен әрі аспау үшін, көлденең scroll шықпасын. */
+  overflow-x: clip;
 }
 
 h1,
@@ -105,38 +111,28 @@ audio {
   max-width: 220px;
 }
 
-/* ------- decor placeholder zones -------
-   Заменяются на background-image/img, когда появится графика.
-   Пока — сплошной цвет из палитры, чтобы был виден контур зоны. */
+/* ------- қазақ оюлары (decor zones) -------
+   assets/ornaments/*.png негізінде — DESIGN.md: "subtle, elegant, never overload". */
 [data-decor-zone] {
-  background: var(--color-primary-dark);
-  background-size: cover;
+  background-repeat: no-repeat;
   background-position: center;
-}
-
-[data-decor-zone='login-corner-tl'],
-[data-decor-zone='login-corner-tr'] {
-  background: var(--color-accent-orange);
-  opacity: 0.18;
-}
-
-[data-decor-zone='login-yurt-photo'] {
-  background: linear-gradient(160deg, var(--color-primary-dark), #12332f);
-  border-radius: var(--radius-card);
+  background-size: contain;
 }
 
 [data-decor-zone='exam-border-frame'] {
-  background: var(--color-accent-orange);
-  opacity: 0.12;
+  background-image: url('./assets/ornaments/border-strip.png');
+  background-size: cover;
+  opacity: 0.35;
 }
 
 [data-decor-zone='exam-listening-photo'] {
-  background: linear-gradient(160deg, var(--color-primary-dark), #12332f);
+  background-color: var(--color-primary-dark);
+  background-image: linear-gradient(160deg, var(--color-primary-dark), #0a2f2e),
+    url('./assets/ornaments/yurt-icon.png');
+  background-size: cover, 38%;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
   border-radius: var(--radius-control);
-}
-
-[data-decor-zone='sidebar-logo-mark'] {
-  background: transparent;
 }
 
 @media (max-width: 767px) {

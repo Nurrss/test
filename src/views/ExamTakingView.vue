@@ -156,9 +156,17 @@ function startSectionTimer() {
     remainingSeconds.value -= 1
     if (remainingSeconds.value <= 0) {
       clearInterval(timerHandle)
-      goToNextSection()
+      handleSectionTimeout()
     }
   }, 1000)
+}
+
+// Уақыт таусылғанда — келесі секцияға өтпес бұрын ағымдағы жауапты сақтау
+// міндетті, әйтпесе соңғы жауап (соның ішінде соңғы секциядан кейінгі
+// finishExam-ға дейінгі жауап та) үнсіз жоғалады.
+async function handleSectionTimeout() {
+  await saveCurrentAnswer()
+  await goToNextSection()
 }
 
 // ------- сохранение ответа -------
@@ -211,10 +219,14 @@ async function goToNextSection() {
   currentSectionIndex.value += 1
   currentQuestionIndex.value = 0
 
-  await supabase
+  const { error } = await supabase
     .from('exam_attempts')
     .update({ current_section: sectionsData.value[currentSectionIndex.value].key })
     .eq('id', attempt.value.id)
+
+  if (error) {
+    loadError.value = 'Секцияны сақтау мүмкін болмады, интернет байланысын тексеріңіз: ' + error.message
+  }
 
   startSectionTimer()
 }
@@ -257,7 +269,8 @@ function goHome() {
 async function logTabEvent(eventType) {
   console.log('[tab-event]', eventType, new Date().toISOString())
   if (!attempt.value) return
-  await supabase.from('tab_events').insert({ attempt_id: attempt.value.id, event_type: eventType })
+  const { error } = await supabase.from('tab_events').insert({ attempt_id: attempt.value.id, event_type: eventType })
+  if (error) console.error('[tab-event] insert failed', error)
 }
 
 function handleVisibilityChange() {

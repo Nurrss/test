@@ -3,10 +3,11 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { isSupabaseConfigured } from '../lib/supabase'
-import AppCard from '../components/shared/AppCard.vue'
 import AppInput from '../components/shared/AppInput.vue'
 import AppButton from '../components/shared/AppButton.vue'
-import DecorZone from '../components/shared/DecorZone.vue'
+import logoMark from '../assets/ornaments/logo-mark.png'
+import cornerOrnament from '../assets/photos/corner.svg'
+import nomadHome from '../assets/photos/nomad-home.webp'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -49,27 +50,26 @@ function switchMode(next) {
 
 <template>
   <div class="login-page">
-    <DecorZone zone="login-corner-tl" class="login-page__corner login-page__corner--tl" />
-    <DecorZone zone="login-corner-tr" class="login-page__corner login-page__corner--tr" />
+    <img :src="cornerOrnament" alt="" class="login-page__corner login-page__corner--tl" />
+    <img :src="cornerOrnament" alt="" class="login-page__corner login-page__corner--tr" />
 
-    <div class="login-header">
-      <div class="login-header__logo">Ә</div>
-      <h1 class="login-header__title">Ағылшын тілі</h1>
-      <p class="login-header__subtitle">онлайн емтихан платформасы</p>
-      <p class="login-header__description">
-        Оқушылардың ағылшын тілі деңгейін Pre-A1 – A2 (CEFR) бойынша тексеру жүйесі
-      </p>
-    </div>
+    <div class="login-window">
+      <div class="login-window__intro">
+        <div class="login-window__logo"><img :src="logoMark" alt="Логотип" /></div>
+        <h1 class="login-window__title">Ағылшын тілі</h1>
+        <p class="login-window__subtitle">онлайн емтихан платформасы</p>
+        <p class="login-window__description">
+          Оқушылардың ағылшын тілі деңгейін Pre-A1 – A2 (CEFR) бойынша тексеру жүйесі
+        </p>
+        <div class="login-window__photo" :style="{ backgroundImage: `url(${nomadHome})` }"></div>
+      </div>
 
-    <div class="login-hero">
-      <DecorZone zone="login-yurt-photo" class="login-hero__photo" min-height="320px" />
-
-      <AppCard class="login-card">
-        <h2 class="login-card__title">
+      <div class="login-window__form-side">
+        <h2 class="login-window__form-title">
           {{ mode === 'teacher' ? 'Мұғалімдерге кіру' : 'Оқушыға кіру' }}
         </h2>
 
-        <form class="login-card__form" @submit.prevent="handleSubmit">
+        <form class="login-window__form" @submit.prevent="handleSubmit">
           <AppInput
             v-if="mode === 'teacher'"
             v-model="email"
@@ -87,9 +87,9 @@ function switchMode(next) {
 
           <AppInput v-model="password" type="password" label="Құпия сөз" placeholder="••••••••" />
 
-          <button type="button" class="login-card__forgot">Құпия сөзді ұмыттыңыз ба?</button>
+          <button type="button" class="login-window__forgot">Құпия сөзді ұмыттыңыз ба?</button>
 
-          <p v-if="errorMessage" class="login-card__error">{{ errorMessage }}</p>
+          <p v-if="errorMessage" class="login-window__error">{{ errorMessage }}</p>
 
           <AppButton type="submit" full-width :disabled="isSubmitting">
             {{ isSubmitting ? 'Кірістіру...' : 'Кіру' }}
@@ -99,15 +99,15 @@ function switchMode(next) {
         <button
           v-if="mode === 'teacher'"
           type="button"
-          class="login-card__switch"
+          class="login-window__switch"
           @click="switchMode('student')"
         >
           <i class="fa-solid fa-user-graduate"></i> Оқушы ретінде кіру
         </button>
-        <button v-else type="button" class="login-card__switch" @click="switchMode('teacher')">
+        <button v-else type="button" class="login-window__switch" @click="switchMode('teacher')">
           <i class="fa-solid fa-chalkboard-user"></i> Мұғалім ретінде кіру
         </button>
-      </AppCard>
+      </div>
     </div>
   </div>
 </template>
@@ -115,105 +115,129 @@ function switchMode(next) {
 <style scoped>
 .login-page {
   position: relative;
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 3rem 2rem 6rem;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.5rem;
   overflow: hidden;
 }
 
 .login-page__corner {
   position: absolute;
-  width: 200px;
-  height: 200px;
-  opacity: 0.5;
+  width: 260px;
+  height: auto;
+  opacity: 0.35;
   pointer-events: none;
   z-index: 0;
 }
 
 .login-page__corner--tl {
-  top: -20px;
-  left: -20px;
-  border-radius: 0 0 999px 0;
+  top: -30px;
+  left: -30px;
 }
 
 .login-page__corner--tr {
-  top: -20px;
-  right: -20px;
-  border-radius: 0 0 0 999px;
+  top: -30px;
+  right: -30px;
+  transform: scaleX(-1);
 }
 
-.login-header {
+.login-window {
   position: relative;
   z-index: 1;
-  text-align: center;
+  width: 100%;
+  max-width: 980px;
+  min-height: 620px;
+  background: var(--color-card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+}
+
+.login-window__intro {
+  position: relative;
+  background: var(--color-bg);
+  padding: 3rem 2.5rem 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 2.5rem;
+  text-align: center;
 }
 
-.login-header__logo {
+.login-window__logo {
   width: 84px;
   height: 84px;
   border-radius: 50%;
-  background: var(--color-primary-dark);
-  border: 3px solid var(--color-accent-orange);
-  color: #fff;
-  font-family: var(--font-heading);
-  font-size: 32px;
+  background: rgb(255 255 255 / 100%);
+  border: 3px solid var(--color-gold);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 0.5rem;
+  padding: 14px;
+  margin-bottom: 0.75rem;
+  box-shadow: var(--shadow-card);
 }
 
-.login-header__title {
+.login-window__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.login-window__title {
   color: var(--color-primary-dark);
+  font-size: 32px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
-.login-header__subtitle {
+.login-window__subtitle {
   font-family: var(--font-heading);
-  font-size: 20px;
+  font-size: 19px;
+  font-weight: 700;
   color: var(--color-primary-dark);
+  margin-top: 0.35rem;
 }
 
-.login-header__description {
-  max-width: 460px;
+.login-window__description {
+  max-width: 380px;
   color: var(--color-text-secondary);
   line-height: 1.6;
-  margin-top: 0.4rem;
+  margin-top: 0.75rem;
 }
 
-.login-hero {
-  position: relative;
-  z-index: 1;
-  padding-bottom: 5rem;
+.login-window__photo {
+  width: calc(100% + 5rem);
+  margin: 1.75rem -2.5rem 0;
+  flex: 1;
+  min-height: 220px;
+  background-size: cover;
+  background-position: center;
 }
 
-.login-hero__photo {
-  width: 100%;
+.login-window__form-side {
+  background: var(--color-card);
+  padding: 3rem 2.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.5rem;
 }
 
-.login-card {
-  position: absolute;
-  right: 2rem;
-  bottom: 0;
-  width: 380px;
-  max-width: calc(100% - 2rem);
+.login-window__form-title {
+  color: var(--color-primary-dark);
 }
 
-.login-card__title {
-  margin-bottom: 1.25rem;
-}
-
-.login-card__form {
+.login-window__form {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.login-card__forgot {
+.login-window__forgot {
   align-self: flex-end;
   background: none;
   border: none;
@@ -225,19 +249,18 @@ function switchMode(next) {
   margin-top: -0.4rem;
 }
 
-.login-card__error {
+.login-window__error {
   color: var(--color-accent-red);
   font-size: var(--fs-label);
   margin: 0;
 }
 
-.login-card__switch {
+.login-window__switch {
   width: 100%;
   background: none;
   border: none;
   border-top: 1px solid var(--color-border);
-  margin-top: 1.25rem;
-  padding-top: 1.1rem;
+  padding-top: 1.25rem;
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 13px;
@@ -245,31 +268,34 @@ function switchMode(next) {
   cursor: pointer;
 }
 
-.login-card__switch:hover {
+.login-window__switch:hover {
   color: var(--color-primary-dark);
 }
 
-@media (max-width: 1023px) {
-  .login-hero {
-    padding-bottom: 0;
+@media (max-width: 900px) {
+  .login-window {
+    grid-template-columns: 1fr;
+    min-height: 0;
   }
 
-  .login-card {
-    position: static;
-    width: 100%;
-    max-width: 100%;
-    margin-top: 1.5rem;
+  .login-window__intro {
+    padding: 2.5rem 1.75rem 0;
+  }
+
+  .login-window__photo {
+    width: calc(100% + 3.5rem);
+    margin: 1.5rem -1.75rem 0;
+    min-height: 180px;
+  }
+
+  .login-window__form-side {
+    padding: 2.5rem 1.75rem;
   }
 }
 
-@media (max-width: 767px) {
-  .login-page {
-    padding: 2rem 1.25rem 3rem;
-  }
-
+@media (max-width: 640px) {
   .login-page__corner {
-    width: 120px;
-    height: 120px;
+    width: 160px;
   }
 }
 </style>

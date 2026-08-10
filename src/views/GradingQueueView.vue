@@ -83,18 +83,24 @@ async function finalizeAttemptIfComplete(attemptId) {
 
   const [{ data: allAnswers }, { data: attemptRow }] = await Promise.all([
     supabase.from('student_answers').select('points_awarded').eq('attempt_id', attemptId),
-    supabase.from('exam_attempts').select('auto_score').eq('id', attemptId).single(),
+    supabase.from('exam_attempts').select('auto_score, variant_id').eq('id', attemptId).single(),
   ])
 
   const totalScore = (allAnswers || []).reduce((sum, a) => sum + Number(a.points_awarded || 0), 0)
   const autoScore = Number(attemptRow?.auto_score || 0)
+
+  const { data: variantQuestions } = await supabase
+    .from('questions')
+    .select('max_points')
+    .eq('variant_id', attemptRow?.variant_id)
+  const maxScore = (variantQuestions || []).reduce((sum, q) => sum + Number(q.max_points), 0)
 
   await supabase
     .from('exam_attempts')
     .update({
       manual_score: totalScore - autoScore,
       total_score: totalScore,
-      cefr_level: cefrFromScore(totalScore),
+      cefr_level: cefrFromScore(totalScore, maxScore || 80),
       status: 'graded',
     })
     .eq('id', attemptId)
@@ -106,10 +112,14 @@ async function saveScore() {
 
   errorMessage.value = ''
 
+  const maxPoints = Number(item.max_points)
+  const clampedScore = Math.min(Math.max(Number(item.score) || 0, 0), maxPoints)
+  if (clampedScore !== item.score) item.score = clampedScore
+
   const { error } = await supabase
     .from('student_answers')
     .update({
-      points_awarded: item.score,
+      points_awarded: clampedScore,
       teacher_feedback: item.feedback,
       graded_by: auth.session?.user?.id,
       graded_at: new Date().toISOString(),
@@ -244,7 +254,7 @@ async function saveScore() {
 }
 
 .grading__list-item--active {
-  background: rgba(31, 78, 74, 0.1);
+  background: rgba(15, 92, 90, 0.1);
 }
 
 .grading__empty {

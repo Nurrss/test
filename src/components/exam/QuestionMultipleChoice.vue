@@ -113,7 +113,7 @@ defineEmits(['update:modelValue'])
 
 .mc-question__option--selected {
   border-color: var(--color-primary-dark);
-  background: rgba(31, 78, 74, 0.08);
+  background: rgba(15, 92, 90, 0.08);
   font-weight: 700;
 }
 
@@ -164,12 +164,12 @@ defineEmits(['update:modelValue'])
 }
 
 .mc-question__tf-btn--true {
-  background: rgba(95, 160, 90, 0.15);
+  background: rgba(22, 163, 74, 0.15);
   color: var(--color-accent-green);
 }
 
 .mc-question__tf-btn--false {
-  background: rgba(217, 119, 107, 0.15);
+  background: rgba(220, 38, 38, 0.15);
   color: var(--color-accent-red);
 }
 

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
+import logoMark from '../../assets/ornaments/logo-mark.png'
 
 defineProps({
   open: {
@@ -39,7 +40,7 @@ async function logout() {
 <template>
   <aside class="sidebar" :class="{ 'sidebar--open': open }">
     <div class="sidebar__logo">
-      <span class="sidebar__logo-mark">Ә</span>
+      <span class="sidebar__logo-mark"><img :src="logoMark" alt="Логотип" /></span>
     </div>
 
     <nav class="sidebar__nav">
@@ -65,7 +66,7 @@ async function logout() {
 <style scoped>
 .sidebar {
   width: 260px;
-  background: #1f4e4a;
+  background: var(--color-primary-dark);
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -89,14 +90,18 @@ async function logout() {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  border: 2px solid var(--color-accent-orange);
+  background: rgb(255 255 255 / 100%);
+  border: 2px solid var(--color-gold);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-heading);
-  font-size: 22px;
-  font-weight: 700;
+  padding: 8px;
+}
+
+.sidebar__logo-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .sidebar__nav {
