@@ -26,6 +26,12 @@ const routes = [
         meta: { title: 'Оқушылар', role: 'teacher' },
       },
       {
+        path: 'variants/:id',
+        name: 'variant-editor',
+        component: () => import('../views/VariantEditorView.vue'),
+        meta: { title: 'Нұсқаны өңдеу', role: 'teacher' },
+      },
+      {
         path: 'grading',
         name: 'grading',
         component: () => import('../views/GradingQueueView.vue'),

@@ -33,6 +33,24 @@ function handleClose() {
   emit('close')
 }
 
+// supabase-js's functions.invoke() sets error.message to the generic
+// "Edge Function returned a non-2xx status code" for EVERY non-2xx response —
+// the function's actual { error: "..." } JSON body ends up in error.context
+// (the raw fetch Response), not in error.message. Without this, every real
+// failure (duplicate phone, missing role, function crash) looks identical.
+async function resolveFunctionError(error, data) {
+  if (data?.error) return data.error
+  if (error?.context?.json) {
+    try {
+      const body = await error.context.json()
+      if (body?.error) return body.error
+    } catch {
+      // context body wasn't JSON (e.g. function didn't deploy / crashed before responding) — fall through
+    }
+  }
+  return error?.message || 'белгісіз қате'
+}
+
 async function handleSubmit() {
   errorMessage.value = ''
 
@@ -53,7 +71,7 @@ async function handleSubmit() {
   isSaving.value = false
 
   if (error || data?.error) {
-    errorMessage.value = 'Қосу мүмкін болмады: ' + (data?.error || error.message)
+    errorMessage.value = 'Қосу мүмкін болмады: ' + (await resolveFunctionError(error, data))
     return
   }
 

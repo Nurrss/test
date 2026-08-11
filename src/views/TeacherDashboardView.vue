@@ -44,7 +44,7 @@ async function loadDashboard() {
         .in('status', ['submitted', 'graded'])
         .order('created_at', { ascending: false })
         .limit(5),
-      supabase.from('exam_variants').select('id, name, level, questions(count)').eq('is_active', true),
+      supabase.from('exam_variants').select('id, name, level, is_active, questions(count)').order('created_at', { ascending: false }),
     ])
 
   const firstError = [studentsCount, assignmentsCount, completedCount, pendingGrading, recentRes, variantsRes].find(
@@ -82,6 +82,7 @@ async function loadDashboard() {
     id: v.id,
     name: v.name,
     level: v.level,
+    is_active: v.is_active,
     question_count: v.questions?.[0]?.count ?? 0,
   }))
 

@@ -10,10 +10,12 @@ import DataTable from '../components/shared/DataTable.vue'
 import CefrBadge from '../components/shared/CefrBadge.vue'
 import AddStudentModal from '../components/shared/AddStudentModal.vue'
 import AssignExamModal from '../components/dashboard/AssignExamModal.vue'
+import GroupAssignModal from '../components/dashboard/GroupAssignModal.vue'
 
 const router = useRouter()
 const showAddStudent = ref(false)
 const assignTarget = ref(null)
+const showGroupAssign = ref(false)
 const search = ref('')
 const groupFilter = ref('Барлығы')
 const statusFilter = ref('Барлығы')
@@ -115,6 +117,10 @@ function openStudent(student) {
 function openAssign(student) {
   assignTarget.value = student
 }
+
+const groupStudents = computed(() =>
+  groupFilter.value === 'Барлығы' ? [] : students.value.filter((s) => s.group_name === groupFilter.value)
+)
 </script>
 
 <template>
@@ -142,6 +148,13 @@ function openAssign(student) {
         <select v-model="statusFilter" class="students__select">
           <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
         </select>
+        <AppButton
+          variant="outline"
+          :disabled="groupFilter === 'Барлығы' || !groupStudents.length"
+          @click="showGroupAssign = true"
+        >
+          {{ groupFilter === 'Барлығы' ? 'Топты таңдаңыз' : `${groupFilter} тобын тағайындау` }}
+        </AppButton>
       </div>
 
       <p v-if="loading" class="students__loading">Жүктелуде...</p>
@@ -178,6 +191,14 @@ function openAssign(student) {
       :visible="!!assignTarget"
       :student="assignTarget"
       @close="assignTarget = null"
+      @assigned="loadStudents"
+    />
+
+    <GroupAssignModal
+      :visible="showGroupAssign"
+      :group-name="groupFilter"
+      :students="groupStudents"
+      @close="showGroupAssign = false"
       @assigned="loadStudents"
     />
   </div>
