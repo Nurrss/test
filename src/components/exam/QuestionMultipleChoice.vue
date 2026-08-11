@@ -58,14 +58,21 @@ defineEmits(['update:modelValue'])
         min-height="180px"
       />
       <img v-else-if="question.content.image_url" :src="question.content.image_url" class="mc-question__image" />
-      <div class="mc-question__options">
+      <div
+        class="mc-question__options"
+        :class="{ 'mc-question__options--grid': question.content.options?.some((o) => o.image_url) }"
+      >
         <button
           v-for="option in question.content.options"
           :key="option.id"
           class="mc-question__option"
-          :class="{ 'mc-question__option--selected': modelValue === option.id }"
+          :class="{
+            'mc-question__option--selected': modelValue === option.id,
+            'mc-question__option--image': option.image_url,
+          }"
           @click="$emit('update:modelValue', option.id)"
         >
+          <img v-if="option.image_url" :src="option.image_url" class="mc-question__option-image" />
           {{ option.label }}
         </button>
       </div>
@@ -115,6 +122,27 @@ defineEmits(['update:modelValue'])
   border-color: var(--color-primary-dark);
   background: rgba(15, 92, 90, 0.08);
   font-weight: 700;
+}
+
+.mc-question__options--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.75rem;
+}
+
+.mc-question__option--image {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.mc-question__option-image {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-control);
 }
 
 .mc-question__tf-row {
