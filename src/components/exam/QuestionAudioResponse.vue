@@ -112,6 +112,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="audio-response">
     <p class="audio-response__text">{{ question.content.text }}</p>
+    <img v-if="question.content.image_url" :src="question.content.image_url" class="audio-response__image" />
     <div class="audio-response__controls">
       <button v-if="!isRecording" class="audio-response__btn audio-response__btn--record" @click="startRecording">
         {{ previewUrl ? 'Қайта жазу' : 'Жазуды бастау' }}
@@ -144,6 +145,12 @@ onBeforeUnmount(() => {
 .audio-response__text {
   font-size: 16px;
   font-weight: 600;
+}
+
+.audio-response__image {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: var(--radius-control);
 }
 
 .audio-response__controls {
