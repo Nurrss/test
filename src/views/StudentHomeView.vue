@@ -23,10 +23,16 @@ async function loadStatus() {
 
   const studentId = auth.session?.user?.id
 
+  // Иерархия resolve_attempt() (schema_patch_05) дәл қайталанады: allow_retake=true
+  // жол бірінші кезекте, әйтпесе ең соңғы assigned_at. Бөлек ретті қолдансақ,
+  // мұнда көрсетілген нұсқа мен экзамен басталғанда іс жүзінде ашылатын нұсқа
+  // сәйкес келмей қалуы мүмкін (мысалы, ескі нұсқаға retake рұқсат етілген
+  // соң оқушыға жаңа нұсқа тағайындалса).
   const { data: assignmentRow, error: assignmentError } = await supabase
     .from('exam_assignments')
     .select('variant_id, allow_retake, exam_variants(name, level)')
     .eq('student_id', studentId)
+    .order('allow_retake', { ascending: false })
     .order('assigned_at', { ascending: false })
     .limit(1)
     .maybeSingle()
