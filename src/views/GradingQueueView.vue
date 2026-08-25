@@ -71,39 +71,55 @@ async function loadQueue() {
 
 onMounted(loadQueue)
 
+// Кез келген аралық сұраныс сәтсіз болса, функция үнсіз жалғаспай,
+// қатені жоғары көтереді — әйтпесе, мысалы, "remaining" сұранысы желі
+// ақауынан бос қайтарылса, әлі бағаланбаған жауаптары бар талпыныс
+// "graded" деп белгіленіп, дұрыс емес total_score-пен мәңгі queue-дан
+// жоғалатын еді.
 async function finalizeAttemptIfComplete(attemptId) {
-  const { data: remaining } = await supabase
+  const { data: remaining, error: remainingError } = await supabase
     .from('student_answers')
     .select('id, questions!inner(requires_manual_grading)')
     .eq('attempt_id', attemptId)
     .is('points_awarded', null)
     .eq('questions.requires_manual_grading', true)
 
+  if (remainingError) throw remainingError
   if (remaining && remaining.length > 0) return
 
-  const [{ data: allAnswers }, { data: attemptRow }] = await Promise.all([
+  const [
+    { data: allAnswers, error: answersError },
+    { data: attemptRow, error: attemptError },
+  ] = await Promise.all([
     supabase.from('student_answers').select('points_awarded').eq('attempt_id', attemptId),
     supabase.from('exam_attempts').select('auto_score, variant_id').eq('id', attemptId).single(),
   ])
+  if (answersError) throw answersError
+  if (attemptError) throw attemptError
 
   const totalScore = (allAnswers || []).reduce((sum, a) => sum + Number(a.points_awarded || 0), 0)
   const autoScore = Number(attemptRow?.auto_score || 0)
 
-  const { data: variantQuestions } = await supabase
+  const { data: variantQuestions, error: variantQuestionsError } = await supabase
     .from('questions')
     .select('max_points')
     .eq('variant_id', attemptRow?.variant_id)
-  const maxScore = (variantQuestions || []).reduce((sum, q) => sum + Number(q.max_points), 0)
+  if (variantQuestionsError) throw variantQuestionsError
+  if (!variantQuestions || variantQuestions.length === 0) {
+    throw new Error('Нұсқаның сұрақтары табылмады, max ұпай саны есептелмеді')
+  }
+  const maxScore = variantQuestions.reduce((sum, q) => sum + Number(q.max_points), 0)
 
-  await supabase
+  const { error: updateError } = await supabase
     .from('exam_attempts')
     .update({
       manual_score: totalScore - autoScore,
       total_score: totalScore,
-      cefr_level: cefrFromScore(totalScore, maxScore || 80),
+      cefr_level: cefrFromScore(totalScore, maxScore),
       status: 'graded',
     })
     .eq('id', attemptId)
+  if (updateError) throw updateError
 }
 
 async function saveScore() {
@@ -131,7 +147,12 @@ async function saveScore() {
     return
   }
 
-  await finalizeAttemptIfComplete(item.attempt_id)
+  try {
+    await finalizeAttemptIfComplete(item.attempt_id)
+  } catch (err) {
+    errorMessage.value =
+      'Баға сақталды, бірақ соңғы нәтижені есептеу мүмкін болмады: ' + (err?.message || err)
+  }
 
   const index = submissions.value.findIndex((s) => s.id === item.id)
   submissions.value.splice(index, 1)

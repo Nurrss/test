@@ -13,6 +13,7 @@ export const useAuthStore = defineStore('auth', {
   state: () => ({
     session: null,
     profile: null,
+    profileError: null,
     initialized: false,
     loading: false,
   }),
@@ -54,7 +55,13 @@ export const useAuthStore = defineStore('auth', {
         .eq('id', this.session.user.id)
         .single()
 
-      if (!error) this.profile = data
+      if (error) {
+        console.error('[auth] failed to load profile', error)
+        this.profileError = error
+      } else {
+        this.profile = data
+        this.profileError = null
+      }
     },
 
     async signInTeacher(email, password) {

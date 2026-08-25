@@ -215,7 +215,10 @@ async function handleSubmit() {
 
   const content = { text: text.value.trim() }
   if (questionType.value === 'true_false' && statement.value.trim()) content.statement = statement.value.trim()
-  if (isOptionType.value) content.options = options.value.map((o) => ({ id: o.id, label: o.label.trim() }))
+  // Preserve any extra option fields (e.g. image_url on picture-matching
+  // options, set only by the import pipeline) instead of rebuilding each
+  // option from scratch — this editor has no UI to re-set them.
+  if (isOptionType.value) content.options = options.value.map((o) => ({ ...o, label: o.label.trim() }))
   if (['short_answer', 'open_text'].includes(questionType.value) && placeholder.value.trim()) {
     content.placeholder = placeholder.value.trim()
   }

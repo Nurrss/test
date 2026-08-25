@@ -30,6 +30,7 @@ const answers = ref({})
 const remainingSeconds = ref(0)
 const examSubmitted = ref(false)
 const showTabWarning = ref(false)
+const isNavigating = ref(false)
 
 let timerHandle = null
 let hasLeftTab = false
@@ -211,40 +212,62 @@ async function saveCurrentAnswer() {
   }
 }
 
+// Секция индексі мен таймер тек сервер current_section-ды растағаннан кейін
+// ғана жылжиды — әйтпесе жаңарту сәтсіз болса, клиент пен сервер күйі
+// алшақтап кетеді (студент "келесі" секцияда жауап беріп жатады, ал
+// resolve_attempt() қайта жүктегенде оны ескі секцияға қайтарады).
 async function goToNextSection() {
   if (isLastSection.value) {
     await finishExam()
     return
   }
-  currentSectionIndex.value += 1
-  currentQuestionIndex.value = 0
+  const nextIndex = currentSectionIndex.value + 1
+  const nextKey = sectionsData.value[nextIndex].key
 
   const { error } = await supabase
     .from('exam_attempts')
-    .update({ current_section: sectionsData.value[currentSectionIndex.value].key })
+    .update({ current_section: nextKey })
     .eq('id', attempt.value.id)
 
   if (error) {
     loadError.value = 'Секцияны сақтау мүмкін болмады, интернет байланысын тексеріңіз: ' + error.message
+    return
   }
 
+  currentSectionIndex.value = nextIndex
+  currentQuestionIndex.value = 0
   startSectionTimer()
 }
 
+// isNavigating қорғанысы қос басу/тез қайталанған шақыруларды блоктайды —
+// әйтпесе екі қатар жүрген handleNext currentQuestionIndex-ті екі рет
+// жылжытып, жауап берілмеген сұрақты үнсіз өткізіп жібереді.
 async function handleNext() {
-  const saved = await saveCurrentAnswer()
-  if (!saved) return
-  if (!isLastQuestionInSection.value) {
-    currentQuestionIndex.value += 1
-    return
+  if (isNavigating.value) return
+  isNavigating.value = true
+  try {
+    const saved = await saveCurrentAnswer()
+    if (!saved) return
+    if (!isLastQuestionInSection.value) {
+      currentQuestionIndex.value += 1
+      return
+    }
+    await goToNextSection()
+  } finally {
+    isNavigating.value = false
   }
-  await goToNextSection()
 }
 
 async function handlePrev() {
-  const saved = await saveCurrentAnswer()
-  if (!saved) return
-  if (currentQuestionIndex.value > 0) currentQuestionIndex.value -= 1
+  if (isNavigating.value) return
+  isNavigating.value = true
+  try {
+    const saved = await saveCurrentAnswer()
+    if (!saved) return
+    if (currentQuestionIndex.value > 0) currentQuestionIndex.value -= 1
+  } finally {
+    isNavigating.value = false
+  }
 }
 
 async function finishExam() {
@@ -366,10 +389,14 @@ onBeforeUnmount(() => {
         />
 
         <div class="exam-taking__nav">
-          <AppButton variant="secondary" :disabled="currentQuestionIndex === 0" @click="handlePrev">
+          <AppButton
+            variant="secondary"
+            :disabled="currentQuestionIndex === 0 || isNavigating"
+            @click="handlePrev"
+          >
             Алдыңғы
           </AppButton>
-          <AppButton @click="handleNext">
+          <AppButton :disabled="isNavigating" @click="handleNext">
             {{ isLastQuestionInSection && isLastSection ? 'Аяқтау' : 'Келесі' }}
           </AppButton>
         </div>

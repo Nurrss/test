@@ -78,7 +78,12 @@ const router = createRouter({
 })
 
 function homeRouteForRole(role) {
-  return role === 'student' ? { name: 'student-home' } : { name: 'dashboard' }
+  if (role === 'student') return { name: 'student-home' }
+  if (role === 'teacher') return { name: 'dashboard' }
+  // role === null means the profile failed to load (see auth store loadProfile) —
+  // there's no safe home route to send them to, so bounce to login rather than
+  // falling back to the teacher dashboard.
+  return { name: 'login' }
 }
 
 router.beforeEach(async (to) => {

@@ -157,16 +157,24 @@ async function allowRetake() {
   allowingRetake.value = true
   retakeMessage.value = ''
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('exam_assignments')
     .update({ allow_retake: true })
     .eq('student_id', student.value.student_id)
     .eq('variant_id', student.value.variant_id)
+    .select('id')
 
   allowingRetake.value = false
-  retakeMessage.value = error
-    ? 'Рұқсат беру мүмкін болмады: ' + error.message
-    : 'Қайта тапсыруға рұқсат берілді'
+  if (error) {
+    retakeMessage.value = 'Рұқсат беру мүмкін болмады: ' + error.message
+  } else if (!data || data.length === 0) {
+    // .update() қатесіз қайтады, бірақ ешбір жол сәйкес келмесе де data
+    // бос болады — бұл жағдайды сәтсіздік ретінде көрсету керек, әйтпесе
+    // мұғалім рұқсат берілді деп ойлайды, ал іс жүзінде ешнәрсе өзгермеген.
+    retakeMessage.value = 'Тағайындау табылмады, рұқсат берілмеді'
+  } else {
+    retakeMessage.value = 'Қайта тапсыруға рұқсат берілді'
+  }
 }
 
 onMounted(() => loadResults(route.params.attemptId))
