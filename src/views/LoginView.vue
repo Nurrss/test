@@ -5,7 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import { isSupabaseConfigured } from '../lib/supabase'
 import AppButton from '../components/shared/AppButton.vue'
 import logoMark from '../assets/ornaments/logo-mark.png'
-import loginBg from '../assets/photos/login-bg.webp'
+import loginBg from '../assets/photos/login.png'
 import goldOrnament from '../assets/photos/qoshqar-muyiz-border.svg'
 
 const router = useRouter()
