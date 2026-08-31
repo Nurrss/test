@@ -47,6 +47,7 @@ for (const s of students) {
     full_name: s.full_name,
     phone: s.phone,
     group_name: GROUP,
+    password_plain: PASSWORD,
   })
 
   if (profileError) {

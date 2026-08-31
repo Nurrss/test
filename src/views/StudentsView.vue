@@ -9,12 +9,14 @@ import StatCard from '../components/shared/StatCard.vue'
 import DataTable from '../components/shared/DataTable.vue'
 import CefrBadge from '../components/shared/CefrBadge.vue'
 import AddStudentModal from '../components/shared/AddStudentModal.vue'
+import ResetPasswordModal from '../components/shared/ResetPasswordModal.vue'
 import AssignExamModal from '../components/dashboard/AssignExamModal.vue'
 import GroupAssignModal from '../components/dashboard/GroupAssignModal.vue'
 
 const router = useRouter()
 const showAddStudent = ref(false)
 const assignTarget = ref(null)
+const resetTarget = ref(null)
 const showGroupAssign = ref(false)
 const search = ref('')
 const groupFilter = ref('Барлығы')
@@ -22,6 +24,23 @@ const statusFilter = ref('Барлығы')
 const loading = ref(true)
 const errorMessage = ref('')
 const students = ref([])
+const revealedPasswords = ref(new Set())
+
+function togglePassword(studentId) {
+  const next = new Set(revealedPasswords.value)
+  if (next.has(studentId)) next.delete(studentId)
+  else next.add(studentId)
+  revealedPasswords.value = next
+}
+
+async function copyPassword(password) {
+  try {
+    await navigator.clipboard.writeText(password)
+  } catch {
+    // Clipboard API қолжетімсіз болса (http, ескі браузер) — үнсіз өткіземіз,
+    // құпия сөз бәрібір экранда көрініп тұр, қолмен көшіруге болады.
+  }
+}
 
 async function loadStudents() {
   loading.value = true
@@ -29,7 +48,7 @@ async function loadStudents() {
 
   const { data: profiles, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, full_name, group_name, phone')
+    .select('id, full_name, group_name, phone, password_plain')
     .eq('role', 'student')
     .order('full_name')
 
@@ -74,6 +93,7 @@ async function loadStudents() {
       full_name: p.full_name,
       group_name: p.group_name || '—',
       phone: p.phone || '—',
+      password_plain: p.password_plain || null,
       attempts_count: attempts.length,
       last_score: latest?.total_score ?? null,
       cefr_level: latest?.cefr_level ?? null,
@@ -103,6 +123,7 @@ const columns = [
   { key: 'full_name', label: 'Аты', sortable: true },
   { key: 'group_name', label: 'Топ', sortable: true },
   { key: 'phone', label: 'Телефон', sortable: false },
+  { key: 'password_plain', label: 'Құпия сөз', sortable: false },
   { key: 'attempts_count', label: 'Тапсырған емтихан', sortable: true },
   { key: 'last_score', label: 'Соңғы балл', sortable: true },
   { key: 'cefr_level', label: 'Деңгей', sortable: false },
@@ -116,6 +137,16 @@ function openStudent(student) {
 
 function openAssign(student) {
   assignTarget.value = student
+}
+
+function openReset(student) {
+  resetTarget.value = student
+}
+
+function handlePasswordReset({ studentId, newPassword }) {
+  const student = students.value.find((s) => s.id === studentId)
+  if (student) student.password_plain = newPassword
+  revealedPasswords.value = new Set(revealedPasswords.value).add(studentId)
 }
 
 const groupStudents = computed(() =>
@@ -166,6 +197,31 @@ const groupStudents = computed(() =>
         <template #cell-last_score="{ row }">
           {{ row.last_score ?? '—' }}
         </template>
+        <template #cell-password_plain="{ row }">
+          <div v-if="row.password_plain" class="students__password">
+            <code>{{ revealedPasswords.has(row.id) ? row.password_plain : '••••••••' }}</code>
+            <button
+              type="button"
+              class="students__icon-btn"
+              :aria-label="revealedPasswords.has(row.id) ? 'Жасыру' : 'Көрсету'"
+              @click="togglePassword(row.id)"
+            >
+              <i class="fa-solid" :class="revealedPasswords.has(row.id) ? 'fa-eye-slash' : 'fa-eye'"></i>
+            </button>
+            <button
+              type="button"
+              class="students__icon-btn"
+              aria-label="Көшіру"
+              @click="copyPassword(row.password_plain)"
+            >
+              <i class="fa-solid fa-copy"></i>
+            </button>
+          </div>
+          <span v-else class="students__password-missing">
+            сақталмаған
+            <button class="students__more" @click="openReset(row)">орнату</button>
+          </span>
+        </template>
         <template #cell-actions="{ row }">
           <div class="students__actions">
             <button
@@ -176,6 +232,7 @@ const groupStudents = computed(() =>
               Толығырақ
             </button>
             <button class="students__more" @click="openAssign(row)">Тағайындау</button>
+            <button v-if="row.password_plain" class="students__more" @click="openReset(row)">Ауыстыру</button>
           </div>
         </template>
       </DataTable>
@@ -192,6 +249,13 @@ const groupStudents = computed(() =>
       :student="assignTarget"
       @close="assignTarget = null"
       @assigned="loadStudents"
+    />
+
+    <ResetPasswordModal
+      :visible="!!resetTarget"
+      :student="resetTarget"
+      @close="resetTarget = null"
+      @reset="handlePasswordReset"
     />
 
     <GroupAssignModal
@@ -273,6 +337,42 @@ const groupStudents = computed(() =>
   cursor: pointer;
   font-size: var(--fs-label);
   white-space: nowrap;
+}
+
+.students__password {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.students__password code {
+  font-family: var(--font-body);
+  background: var(--color-input-bg);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.students__icon-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0.2rem;
+  display: flex;
+  align-items: center;
+}
+
+.students__icon-btn:hover {
+  color: var(--color-primary-dark);
+}
+
+.students__password-missing {
+  color: var(--color-text-secondary);
+  font-size: var(--fs-label);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 @media (max-width: 1279px) {

@@ -14,6 +14,7 @@ const loading = ref(true)
 const errorMessage = ref('')
 const assignment = ref(null) // { variant_id, allow_retake, name, level }
 const attempt = ref(null) // { status, total_score, cefr_level }
+const passwordRevealed = ref(false)
 
 // Только чтение — resolve_attempt() имеет побочный эффект (создаёт попытку),
 // поэтому его нельзя дёргать просто для показа статуса на главной странице.
@@ -127,6 +128,31 @@ onMounted(loadStatus)
         </div>
       </template>
     </AppCard>
+
+    <AppCard class="student-home__credentials">
+      <h3>Кіру деректері</h3>
+      <p class="student-home__credentials-row">
+        <span class="student-home__credentials-label">Телефон:</span>
+        <span>{{ auth.profile?.phone || '—' }}</span>
+      </p>
+      <p class="student-home__credentials-row">
+        <span class="student-home__credentials-label">Құпия сөз:</span>
+        <template v-if="auth.profile?.password_plain">
+          <code>{{ passwordRevealed ? auth.profile.password_plain : '••••••••' }}</code>
+          <button
+            type="button"
+            class="student-home__reveal-btn"
+            :aria-label="passwordRevealed ? 'Жасыру' : 'Көрсету'"
+            @click="passwordRevealed = !passwordRevealed"
+          >
+            <i class="fa-solid" :class="passwordRevealed ? 'fa-eye-slash' : 'fa-eye'"></i>
+          </button>
+        </template>
+        <span v-else class="student-home__credentials-missing">
+          сақталмаған — ұмытып қалсаңыз, мұғаліміңізге хабарласыңыз
+        </span>
+      </p>
+    </AppCard>
   </div>
 </template>
 
@@ -188,5 +214,49 @@ onMounted(loadStatus)
   display: flex;
   gap: 0.75rem;
   margin-top: 0.5rem;
+}
+
+.student-home__credentials h3 {
+  font-size: 15px;
+  margin-bottom: 0.75rem;
+}
+
+.student-home__credentials-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--fs-body);
+  padding: 0.3rem 0;
+}
+
+.student-home__credentials-label {
+  color: var(--color-text-secondary);
+  min-width: 90px;
+}
+
+.student-home__credentials-row code {
+  font-family: var(--font-body);
+  background: var(--color-input-bg);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+}
+
+.student-home__reveal-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0.2rem;
+  display: flex;
+  align-items: center;
+}
+
+.student-home__reveal-btn:hover {
+  color: var(--color-primary-dark);
+}
+
+.student-home__credentials-missing {
+  color: var(--color-text-secondary);
+  font-size: var(--fs-label);
 }
 </style>

@@ -95,6 +95,9 @@ Deno.serve(async (req) => {
     full_name,
     phone,
     group_name: group_name || null,
+    // Ашық мәтінмен сақталады — оқушы құпия сөзін ұмытса, өзі де, мұғалім де
+    // көре алуы үшін (Supabase Auth хешті ешқашан кері қайтармайды).
+    password_plain: password,
   })
 
   if (profileError) {
