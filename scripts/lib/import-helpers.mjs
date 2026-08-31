@@ -72,12 +72,12 @@ export function matching({ text, audio = null, options, correct, points = 1 }) {
 
 // Always manual-graded: the schema's auto-grading is exact jsonb equality,
 // too fragile for free-text reading-comprehension answers (see project notes).
-export function shortAnswer({ text, image = null, placeholder = null, points = 1 }) {
+export function shortAnswer({ text, image = null, audio = null, placeholder = null, points = 1 }) {
   return {
     question_type: 'short_answer',
     points,
     image,
-    audio: null,
+    audio,
     content: { text, ...(placeholder ? { placeholder } : {}) },
     requiresManual: true,
   }
