@@ -26,6 +26,12 @@ const routes = [
         meta: { title: 'Оқушылар', role: 'teacher' },
       },
       {
+        path: 'students/:id',
+        name: 'student-profile',
+        component: () => import('../views/StudentProfileView.vue'),
+        meta: { title: 'Оқушы профилі', role: 'teacher' },
+      },
+      {
         path: 'variants/:id',
         name: 'variant-editor',
         component: () => import('../views/VariantEditorView.vue'),
