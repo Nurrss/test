@@ -9,6 +9,7 @@ import QuestionAudioResponse from '../components/exam/QuestionAudioResponse.vue'
 import TabWarningModal from '../components/exam/TabWarningModal.vue'
 import AppButton from '../components/shared/AppButton.vue'
 import AppCard from '../components/shared/AppCard.vue'
+import AudioPlayer from '../components/shared/AudioPlayer.vue'
 
 const router = useRouter()
 
@@ -378,6 +379,17 @@ onBeforeUnmount(() => {
         </div>
 
         <p v-if="loadError" class="exam-taking__error">{{ loadError }}</p>
+
+        <!-- key = media_url (not question id) — тыңдау бөлімінің бірнеше сұрағы
+             бір аудионы бөлісе алады (мыс. matching-типті 5 сұрақ бір диалогке),
+             сол жағдайда навигация кезінде плеер қайта құрылмай, ойнату күйі
+             (уақыты, паузасы) сақталады. Әр түрлі аудио болса — key өзгеріп,
+             плеер дұрыс қайта жүктеледі. -->
+        <AudioPlayer
+          v-if="currentQuestion.media_url"
+          :key="currentQuestion.media_url"
+          :src="currentQuestion.media_url"
+        />
 
         <component
           :is="questionComponent(currentQuestion)"

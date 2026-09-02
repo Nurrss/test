@@ -1,5 +1,4 @@
 <script setup>
-import AudioPlayer from '../shared/AudioPlayer.vue'
 import DecorZone from '../shared/DecorZone.vue'
 
 defineProps({
@@ -19,7 +18,6 @@ defineEmits(['update:modelValue'])
 <template>
   <div class="mc-question">
     <p class="mc-question__text">{{ question.content.text }}</p>
-    <AudioPlayer v-if="question.media_url" :src="question.media_url" />
 
     <div v-if="question.question_type === 'true_false'" class="mc-question__tf-row">
       <DecorZone
