@@ -1,10 +1,19 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 const props = defineProps({
   src: {
     type: String,
     required: true,
+  },
+  // Емтихандағы Listening секциясы үшін: аудио бір рет автоматты түрде
+  // ойнайды, тоқтата алмайсың және айналдыра (seek) алмайсың — нақты
+  // тыңдалым емтиханында жазба бір рет беріледі, оқушы оны басқара алмайды.
+  // Бұл болмаса, оқушы паузаға қойып жауап жазып, немесе алдыңғы сұраққа
+  // қайтып (сол аудио қайта жүктеліп) шексіз қайта тыңдай алар еді.
+  locked: {
+    type: Boolean,
+    default: false,
   },
 })
 
@@ -12,6 +21,7 @@ const audioEl = ref(null)
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
+const hasEnded = ref(false)
 
 function formatTime(seconds) {
   if (!Number.isFinite(seconds)) return '0:00'
@@ -25,7 +35,7 @@ function formatTime(seconds) {
 const progressRatio = computed(() => (duration.value ? currentTime.value / duration.value : 0))
 
 function togglePlay() {
-  if (!audioEl.value) return
+  if (!audioEl.value || props.locked) return
   if (isPlaying.value) {
     audioEl.value.pause()
   } else {
@@ -41,37 +51,62 @@ function onLoadedMetadata() {
   duration.value = audioEl.value.duration
 }
 
+function onEnded() {
+  isPlaying.value = false
+  hasEnded.value = true
+}
+
 function seek(event) {
-  if (!audioEl.value || !duration.value) return
+  if (props.locked || !audioEl.value || !duration.value) return
   const rect = event.currentTarget.getBoundingClientRect()
   const ratio = (event.clientX - rect.left) / rect.width
   audioEl.value.currentTime = ratio * duration.value
 }
+
+onMounted(() => {
+  // Пайдаланушының "Келесі" батырмасын басуы браузердің autoplay
+  // саясаты үшін жеткілікті "user activation" болып саналады, сондықтан
+  // async play() осы жерде де рұқсат етіледі.
+  if (props.locked) audioEl.value?.play().catch(() => {})
+})
 </script>
 
 <template>
-  <div class="audio-player">
+  <div class="audio-player" :class="{ 'audio-player--locked': locked }">
     <audio
       ref="audioEl"
       :src="src"
       @play="isPlaying = true"
       @pause="isPlaying = false"
-      @ended="isPlaying = false"
+      @ended="onEnded"
       @timeupdate="onTimeUpdate"
       @loadedmetadata="onLoadedMetadata"
     ></audio>
 
-    <button type="button" class="audio-player__toggle" @click="togglePlay">
+    <button
+      v-if="!locked"
+      type="button"
+      class="audio-player__toggle"
+      @click="togglePlay"
+    >
       <i class="fa-solid" :class="isPlaying ? 'fa-pause' : 'fa-play'"></i>
     </button>
+    <i
+      v-else
+      class="fa-solid audio-player__toggle audio-player__toggle--static"
+      :class="hasEnded ? 'fa-volume-xmark' : 'fa-volume-high'"
+    ></i>
 
     <span class="audio-player__time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
 
-    <div class="audio-player__track" @click="seek">
+    <div class="audio-player__track" :class="{ 'audio-player__track--locked': locked }" @click="seek">
       <div class="audio-player__fill" :style="{ width: `${progressRatio * 100}%` }"></div>
     </div>
 
-    <i class="fa-solid fa-volume-high audio-player__volume"></i>
+    <span v-if="locked" class="audio-player__hint">
+      {{ hasEnded ? 'Аяқталды' : 'Ойналуда — тоқтату/қайту мүмкін емес' }}
+    </span>
+    <i v-else class="fa-solid fa-volume-high audio-player__volume"></i>
   </div>
 </template>
 
@@ -99,6 +134,22 @@ function seek(event) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.audio-player__toggle--static {
+  cursor: default;
+}
+
+.audio-player__track--locked {
+  cursor: default;
+  pointer-events: none;
+}
+
+.audio-player__hint {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
 .audio-player__time {

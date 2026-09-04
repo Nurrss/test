@@ -145,6 +145,18 @@ async function loadExam() {
     if (row.answer !== null) answers.value[row.question_id] = row.answer
   }
 
+  // Секцияны әрдайым 1-сұрақтан бастамай, оқушы қалдырған жерден
+  // жалғастырамыз — бұл, атап айтқанда, Listening-те беттi жаңарту
+  // арқылы бұрын өткен аудионы қайта тыңдауды болдырмайды (Алдыңғы
+  // батырмасы өшірулі болса да, жаңарту currentQuestionIndex-ті 0-ге
+  // қайтарып жіберер еді, ал сервер current_question_index сақтамайды).
+  const resumedSection = sectionsData.value[currentSectionIndex.value]
+  const firstUnanswered = resumedSection
+    ? resumedSection.questions.findIndex((q) => answers.value[q.id] === undefined)
+    : -1
+  currentQuestionIndex.value =
+    firstUnanswered >= 0 ? firstUnanswered : Math.max((resumedSection?.questions.length || 1) - 1, 0)
+
   loading.value = false
   startSectionTimer()
 }
@@ -259,8 +271,11 @@ async function handleNext() {
   }
 }
 
+// Тыңдау бөлімінде алдыңғы сұраққа оралуға болмайды — солай болса, аудио
+// (media_url бойынша key өзгеріп) қайта жүктеліп, оқушы оны шексіз қайта
+// тыңдай алар еді. Батырма жасырылған, бірақ функцияны да қорғаймыз.
 async function handlePrev() {
-  if (isNavigating.value) return
+  if (isNavigating.value || currentSection.value?.key === 'listening') return
   isNavigating.value = true
   try {
     const saved = await saveCurrentAnswer()
@@ -379,16 +394,23 @@ onBeforeUnmount(() => {
         </div>
 
         <p v-if="loadError" class="exam-taking__error">{{ loadError }}</p>
+        <p v-if="currentSection.key === 'listening'" class="exam-taking__listening-note">
+          <i class="fa-solid fa-circle-info"></i> Тыңдау бөлімінде алдыңғы сұраққа оралу мүмкін емес — аудио бір рет
+          беріледі.
+        </p>
 
         <!-- key = media_url (not question id) — тыңдау бөлімінің бірнеше сұрағы
              бір аудионы бөлісе алады (мыс. matching-типті 5 сұрақ бір диалогке),
              сол жағдайда навигация кезінде плеер қайта құрылмай, ойнату күйі
              (уақыты, паузасы) сақталады. Әр түрлі аудио болса — key өзгеріп,
-             плеер дұрыс қайта жүктеледі. -->
+             плеер дұрыс қайта жүктеледі.
+             locked — Listening секциясында ғана: аудио бір рет автоматты
+             ойнайды, тоқтата/айналдыра алмайды — нақты емтихандағыдай. -->
         <AudioPlayer
           v-if="currentQuestion.media_url"
           :key="currentQuestion.media_url"
           :src="currentQuestion.media_url"
+          :locked="currentSection.key === 'listening'"
         />
 
         <component
@@ -402,12 +424,14 @@ onBeforeUnmount(() => {
 
         <div class="exam-taking__nav">
           <AppButton
+            v-if="currentSection.key !== 'listening'"
             variant="secondary"
             :disabled="currentQuestionIndex === 0 || isNavigating"
             @click="handlePrev"
           >
             Алдыңғы
           </AppButton>
+          <span v-else class="exam-taking__nav-spacer"></span>
           <AppButton :disabled="isNavigating" @click="handleNext">
             {{ isLastQuestionInSection && isLastSection ? 'Аяқтау' : 'Келесі' }}
           </AppButton>
@@ -511,6 +535,14 @@ onBeforeUnmount(() => {
   padding: 0.65rem 0.9rem;
   border-radius: var(--radius-control);
   font-size: var(--fs-label);
+}
+
+.exam-taking__listening-note {
+  color: var(--color-text-secondary);
+  font-size: var(--fs-label);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .exam-taking__nav {
