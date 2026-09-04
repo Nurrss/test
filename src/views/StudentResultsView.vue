@@ -95,7 +95,9 @@ async function loadResult(attemptId) {
     supabase.from('questions').select('section, max_points').eq('variant_id', attempt.variant_id),
     supabase
       .from('student_answers')
-      .select('points_awarded, teacher_feedback, questions(section, order_index, content, max_points)')
+      .select(
+        'answer, audio_path, points_awarded, teacher_feedback, questions(section, order_index, content, max_points, question_type)'
+      )
       .eq('attempt_id', attempt.id),
   ])
 
@@ -127,16 +129,31 @@ async function loadResult(attemptId) {
   // Мұғалім GradingQueueView-де жазған пікір бұрын мұнда тіпті сұралмайтын —
   // оқушы оны ешқашан көре алмайтын. teacher_feedback бос жол болуы мүмкін
   // (мұғалім ештеңе жазбай сақтаса), сол жағдайда көрсетпейміз.
-  feedbackItems.value = (answers || [])
+  const feedbackRows = (answers || [])
     .filter((a) => a.teacher_feedback && a.teacher_feedback.trim())
     .sort((a, b) => (a.questions?.order_index ?? 0) - (b.questions?.order_index ?? 0))
-    .map((a) => ({
-      section: sectionMeta[a.questions?.section]?.label || a.questions?.section,
-      question_text: a.questions?.content?.text || '',
-      points_awarded: a.points_awarded,
-      max_points: a.questions?.max_points,
-      feedback: a.teacher_feedback,
-    }))
+
+  feedbackItems.value = await Promise.all(
+    feedbackRows.map(async (a) => {
+      let audioUrl = null
+      if (a.questions?.question_type === 'audio_response' && a.audio_path) {
+        const { data: signed } = await supabase.storage
+          .from('speaking-recordings')
+          .createSignedUrl(a.audio_path, 3600)
+        audioUrl = signed?.signedUrl || null
+      }
+
+      return {
+        section: sectionMeta[a.questions?.section]?.label || a.questions?.section,
+        question_text: a.questions?.content?.text || '',
+        answer_text: a.questions?.question_type === 'audio_response' ? null : a.answer,
+        audio_url: audioUrl,
+        points_awarded: a.points_awarded,
+        max_points: a.questions?.max_points,
+        feedback: a.teacher_feedback,
+      }
+    })
+  )
 
   result.value = {
     variant_name: attempt.exam_variants?.name || '—',
@@ -213,7 +230,17 @@ watch(
               </span>
             </div>
             <p v-if="item.question_text" class="my-results__feedback-question">{{ item.question_text }}</p>
-            <p class="my-results__feedback-text">{{ item.feedback }}</p>
+
+            <div class="my-results__feedback-answer">
+              <span class="my-results__feedback-label">Сіздің жауабыңыз:</span>
+              <audio v-if="item.audio_url" :src="item.audio_url" controls class="my-results__feedback-audio"></audio>
+              <p v-else class="my-results__feedback-answer-text">{{ item.answer_text || '—' }}</p>
+            </div>
+
+            <div class="my-results__feedback-answer">
+              <span class="my-results__feedback-label">Мұғалімнің пікірі:</span>
+              <p class="my-results__feedback-text">{{ item.feedback }}</p>
+            </div>
           </li>
         </ul>
       </AppCard>
@@ -385,6 +412,37 @@ watch(
 .my-results__feedback-text {
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.my-results__feedback-answer {
+  margin-bottom: 0.75rem;
+}
+
+.my-results__feedback-answer:last-child {
+  margin-bottom: 0;
+}
+
+.my-results__feedback-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.3rem;
+}
+
+.my-results__feedback-answer-text {
+  line-height: 1.6;
+  white-space: pre-wrap;
+  background: var(--color-card);
+  border-radius: var(--radius-control);
+  padding: 0.6rem 0.75rem;
+}
+
+.my-results__feedback-audio {
+  width: 100%;
+  max-width: 360px;
 }
 
 @media (max-width: 1279px) {
