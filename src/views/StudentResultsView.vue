@@ -22,6 +22,7 @@ const result = ref(null)
 const sectionScores = ref([])
 const progressPoints = ref([])
 const pastAttempts = ref([])
+const feedbackItems = ref([])
 
 const sectionMeta = {
   listening: { label: 'Listening', color: 'var(--color-accent-blue)' },
@@ -73,6 +74,7 @@ async function loadResult(attemptId) {
 
   if (!targetId) {
     result.value = null
+    feedbackItems.value = []
     loading.value = false
     return
   }
@@ -93,7 +95,7 @@ async function loadResult(attemptId) {
     supabase.from('questions').select('section, max_points').eq('variant_id', attempt.variant_id),
     supabase
       .from('student_answers')
-      .select('points_awarded, questions(section)')
+      .select('points_awarded, teacher_feedback, questions(section, order_index, content, max_points)')
       .eq('attempt_id', attempt.id),
   ])
 
@@ -121,6 +123,20 @@ async function loadResult(attemptId) {
   const maxScore = Object.values(maxBySection).reduce((sum, v) => sum + v, 0)
   const displayScore = attempt.total_score ?? attempt.auto_score ?? 0
   const cefrLevel = cefrFromScore(displayScore, maxScore)
+
+  // Мұғалім GradingQueueView-де жазған пікір бұрын мұнда тіпті сұралмайтын —
+  // оқушы оны ешқашан көре алмайтын. teacher_feedback бос жол болуы мүмкін
+  // (мұғалім ештеңе жазбай сақтаса), сол жағдайда көрсетпейміз.
+  feedbackItems.value = (answers || [])
+    .filter((a) => a.teacher_feedback && a.teacher_feedback.trim())
+    .sort((a, b) => (a.questions?.order_index ?? 0) - (b.questions?.order_index ?? 0))
+    .map((a) => ({
+      section: sectionMeta[a.questions?.section]?.label || a.questions?.section,
+      question_text: a.questions?.content?.text || '',
+      points_awarded: a.points_awarded,
+      max_points: a.questions?.max_points,
+      feedback: a.teacher_feedback,
+    }))
 
   result.value = {
     variant_name: attempt.exam_variants?.name || '—',
@@ -185,6 +201,22 @@ watch(
           <CefrScaleTable :current-level="result.cefr_level" :max-score="result.max_score" />
         </AppCard>
       </div>
+
+      <AppCard v-if="feedbackItems.length">
+        <h2>Мұғалімнің пікірі</h2>
+        <ul class="my-results__feedback">
+          <li v-for="(item, index) in feedbackItems" :key="index" class="my-results__feedback-item">
+            <div class="my-results__feedback-head">
+              <span class="my-results__feedback-section">{{ item.section }}</span>
+              <span v-if="item.max_points != null" class="my-results__feedback-score">
+                {{ item.points_awarded ?? '—' }} / {{ item.max_points }}
+              </span>
+            </div>
+            <p v-if="item.question_text" class="my-results__feedback-question">{{ item.question_text }}</p>
+            <p class="my-results__feedback-text">{{ item.feedback }}</p>
+          </li>
+        </ul>
+      </AppCard>
 
       <AppCard v-if="progressPoints.length > 1">
         <h2>Уақыт бойынша прогресс</h2>
@@ -307,6 +339,52 @@ watch(
 
 .my-results__history-item--active {
   outline: 2px solid var(--color-primary-dark);
+}
+
+.my-results__feedback {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.my-results__feedback-item {
+  background: var(--color-input-bg);
+  border-radius: var(--radius-control);
+  padding: 0.9rem 1rem;
+}
+
+.my-results__feedback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.my-results__feedback-section {
+  font-weight: 700;
+  font-size: var(--fs-label);
+  color: var(--color-primary-dark);
+}
+
+.my-results__feedback-score {
+  font-size: var(--fs-label);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.my-results__feedback-question {
+  font-size: var(--fs-label);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  margin-bottom: 0.5rem;
+}
+
+.my-results__feedback-text {
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 @media (max-width: 1279px) {
