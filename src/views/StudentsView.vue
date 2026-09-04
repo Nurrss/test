@@ -179,7 +179,6 @@ const groupStudents = computed(() =>
               Нәтиже
             </button>
             <button class="students__more" @click="openAssign(row)">Тағайындау</button>
-            <button class="students__more" @click="openProfile(row)">Профиль</button>
           </div>
         </template>
       </DataTable>
