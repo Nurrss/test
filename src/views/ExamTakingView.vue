@@ -37,11 +37,48 @@ let timerHandle = null
 let hasLeftTab = false
 
 const currentSection = computed(() => sectionsData.value[currentSectionIndex.value])
-const currentQuestion = computed(() => currentSection.value?.questions[currentQuestionIndex.value])
+
+// "Step" — Listening-те бір топ (нақты экзамендегі "Part"): бір аудиода
+// бірнеше сұрақ бірге беріледі (мыс. 5 сурет бір диалогке), сондықтан оқушы
+// оларды бір-бірлеп емес, топпен бірге көруі керек — әйтпесе аудио 3-сұрақ
+// туралы айтып жатқанда, экранда әлі 1-сұрақ тұрса, оны көре алмай қалады.
+// Қазірше тек 1 және 3-Part үшін қосылған (GROUPED_PART_INDEXES) — қалғаны
+// бұрынғыдай бір-бірлеп көрінеді. Басқа секцияларда әр сұрақ — өз алдына
+// жалғыз топ, бұрынғы мінез-құлық сақталады.
+const GROUPED_PART_INDEXES = new Set([0, 2]) // 0-based: 1-Part, 3-Part
+
+const currentSectionSteps = computed(() => {
+  const questions = currentSection.value?.questions || []
+  if (currentSection.value?.key !== 'listening') return questions.map((q) => [q])
+
+  // Табиғи топтар — бір аудио = бір нақты Part.
+  const naturalGroups = []
+  for (const q of questions) {
+    const lastGroup = naturalGroups[naturalGroups.length - 1]
+    if (lastGroup && lastGroup[0].media_url === q.media_url) {
+      lastGroup.push(q)
+    } else {
+      naturalGroups.push([q])
+    }
+  }
+
+  return naturalGroups.flatMap((group, partIndex) =>
+    GROUPED_PART_INDEXES.has(partIndex) ? [group] : group.map((q) => [q])
+  )
+})
+
+const currentStep = computed(() => currentSectionSteps.value[currentQuestionIndex.value] || [])
+const currentQuestion = computed(() => currentStep.value[0])
 const isLastQuestionInSection = computed(
-  () => currentSection.value && currentQuestionIndex.value === currentSection.value.questions.length - 1
+  () => currentSectionSteps.value.length > 0 && currentQuestionIndex.value === currentSectionSteps.value.length - 1
 )
 const isLastSection = computed(() => currentSectionIndex.value === sectionsData.value.length - 1)
+
+function questionNumber(localIndex) {
+  let n = 0
+  for (let i = 0; i < currentQuestionIndex.value; i++) n += currentSectionSteps.value[i].length
+  return n + localIndex + 1
+}
 
 const progressSections = computed(() =>
   sectionsData.value.map((section, index) => ({
@@ -145,17 +182,17 @@ async function loadExam() {
     if (row.answer !== null) answers.value[row.question_id] = row.answer
   }
 
-  // Секцияны әрдайым 1-сұрақтан бастамай, оқушы қалдырған жерден
+  // Секцияны әрдайым 1-қадамнан бастамай, оқушы қалдырған жерден
   // жалғастырамыз — бұл, атап айтқанда, Listening-те беттi жаңарту
   // арқылы бұрын өткен аудионы қайта тыңдауды болдырмайды (Алдыңғы
   // батырмасы өшірулі болса да, жаңарту currentQuestionIndex-ті 0-ге
   // қайтарып жіберер еді, ал сервер current_question_index сақтамайды).
-  const resumedSection = sectionsData.value[currentSectionIndex.value]
-  const firstUnanswered = resumedSection
-    ? resumedSection.questions.findIndex((q) => answers.value[q.id] === undefined)
-    : -1
-  currentQuestionIndex.value =
-    firstUnanswered >= 0 ? firstUnanswered : Math.max((resumedSection?.questions.length || 1) - 1, 0)
+  // "Қадам" (step) — Listening-те бір топ (Part), басқа секцияларда бір сұрақ.
+  const resumedSteps = currentSectionSteps.value
+  const firstUnansweredStep = resumedSteps.findIndex((group) =>
+    group.some((q) => answers.value[q.id] === undefined)
+  )
+  currentQuestionIndex.value = firstUnansweredStep >= 0 ? firstUnansweredStep : Math.max(resumedSteps.length - 1, 0)
 
   loading.value = false
   startSectionTimer()
@@ -184,45 +221,51 @@ async function handleSectionTimeout() {
 }
 
 // ------- сохранение ответа -------
+// Listening-те бір қадам (step) бірнеше сұрақтан тұруы мүмкін (бір топ,
+// бір аудио) — сондықтан барлық сұрақтарды сақтаймыз, жалғызды емес.
+// Басқа секцияларда step әрдайым бір сұрақ, бұрынғы мінез-құлық сақталады.
 // Возвращает false при реальной ошибке сохранения — вызывающий код должен
-// остановить переход к следующему вопросу/разделу, иначе ответ теряется молча.
+// остановить переход к следующему шагу/разделу, иначе ответ теряется молча.
 async function saveCurrentAnswer() {
-  const question = currentQuestion.value
-  if (!question || !attempt.value) return true
-  const value = answers.value[question.id]
-  if (value === undefined) return true
+  if (!attempt.value) return true
 
-  try {
-    if (question.question_type === 'audio_response') {
-      if (!value?.audioBlob) return true
-      const path = `${attempt.value.id}/${question.id}.webm`
-      const { error: uploadError } = await supabase.storage
-        .from('speaking-recordings')
-        .upload(path, value.audioBlob, { contentType: value.audioBlob.type || 'audio/webm', upsert: true })
-      if (uploadError) throw uploadError
+  for (const question of currentStep.value) {
+    const value = answers.value[question.id]
+    if (value === undefined) continue
 
-      const { error: rpcError } = await supabase.rpc('submit_answer', {
-        p_attempt_id: attempt.value.id,
-        p_question_id: question.id,
-        p_answer: null,
-        p_audio_path: path,
-      })
-      if (rpcError) throw rpcError
-    } else {
-      const { error: rpcError } = await supabase.rpc('submit_answer', {
-        p_attempt_id: attempt.value.id,
-        p_question_id: question.id,
-        p_answer: value,
-        p_audio_path: null,
-      })
-      if (rpcError) throw rpcError
+    try {
+      if (question.question_type === 'audio_response') {
+        if (!value?.audioBlob) continue
+        const path = `${attempt.value.id}/${question.id}.webm`
+        const { error: uploadError } = await supabase.storage
+          .from('speaking-recordings')
+          .upload(path, value.audioBlob, { contentType: value.audioBlob.type || 'audio/webm', upsert: true })
+        if (uploadError) throw uploadError
+
+        const { error: rpcError } = await supabase.rpc('submit_answer', {
+          p_attempt_id: attempt.value.id,
+          p_question_id: question.id,
+          p_answer: null,
+          p_audio_path: path,
+        })
+        if (rpcError) throw rpcError
+      } else {
+        const { error: rpcError } = await supabase.rpc('submit_answer', {
+          p_attempt_id: attempt.value.id,
+          p_question_id: question.id,
+          p_answer: value,
+          p_audio_path: null,
+        })
+        if (rpcError) throw rpcError
+      }
+    } catch (err) {
+      loadError.value = 'Жауапты сақтау мүмкін болмады: ' + (err?.message || err)
+      return false
     }
-    loadError.value = ''
-    return true
-  } catch (err) {
-    loadError.value = 'Жауапты сақтау мүмкін болмады: ' + (err?.message || err)
-    return false
   }
+
+  loadError.value = ''
+  return true
 }
 
 // Секция индексі мен таймер тек сервер current_section-ды растағаннан кейін
@@ -296,8 +339,8 @@ async function finishExam() {
   examSubmitted.value = true
 }
 
-function setAnswer(value) {
-  answers.value[currentQuestion.value.id] = value
+function setAnswerFor(questionId, value) {
+  answers.value[questionId] = value
 }
 
 function goHome() {
@@ -382,11 +425,11 @@ onBeforeUnmount(() => {
 
         <div class="exam-taking__meta">
           <div class="exam-taking__section-progress">
-            <span>{{ currentQuestionIndex + 1 }}/{{ currentSection.questions.length }}</span>
+            <span>{{ currentQuestionIndex + 1 }}/{{ currentSectionSteps.length }}</span>
             <div class="exam-taking__bar">
               <div
                 class="exam-taking__bar-fill"
-                :style="{ width: `${((currentQuestionIndex + 1) / currentSection.questions.length) * 100}%` }"
+                :style="{ width: `${((currentQuestionIndex + 1) / currentSectionSteps.length) * 100}%` }"
               ></div>
             </div>
           </div>
@@ -395,15 +438,14 @@ onBeforeUnmount(() => {
 
         <p v-if="loadError" class="exam-taking__error">{{ loadError }}</p>
         <p v-if="currentSection.key === 'listening'" class="exam-taking__listening-note">
-          <i class="fa-solid fa-circle-info"></i> Тыңдау бөлімінде алдыңғы сұраққа оралу мүмкін емес — аудио бір рет
-          беріледі.
+          <i class="fa-solid fa-circle-info"></i> Тыңдау бөлімінде алдыңғы бөлікке оралу мүмкін емес — аудио бір рет
+          беріледі. Осы бөліктің барлық сұрақтарын төменде көре аласыз.
         </p>
 
-        <!-- key = media_url (not question id) — тыңдау бөлімінің бірнеше сұрағы
-             бір аудионы бөлісе алады (мыс. matching-типті 5 сұрақ бір диалогке),
-             сол жағдайда навигация кезінде плеер қайта құрылмай, ойнату күйі
-             (уақыты, паузасы) сақталады. Әр түрлі аудио болса — key өзгеріп,
-             плеер дұрыс қайта жүктеледі.
+        <!-- key = media_url (not question id) — топтың барлық сұрағы бір аудионы
+             бөліседі, сол жағдайда навигация кезінде плеер қайта құрылмай,
+             ойнату күйі (уақыты, паузасы) сақталады. Әр түрлі аудио болса —
+             key өзгеріп, плеер дұрыс қайта жүктеледі.
              locked — Listening секциясында ғана: аудио бір рет автоматты
              ойнайды, тоқтата/айналдыра алмайды — нақты емтихандағыдай. -->
         <AudioPlayer
@@ -413,13 +455,31 @@ onBeforeUnmount(() => {
           :locked="currentSection.key === 'listening'"
         />
 
+        <!-- Топталған Part (1 және 3 — GROUPED_PART_INDEXES): барлық сұрағы
+             бірден, скроллмен көрінеді. Қалған қадамдар (жалғыз сұрақты
+             топтар) төмендегі v-else тармағымен басқа секциялардай бір-бірлеп
+             көрсетіледі. -->
+        <div v-if="currentStep.length > 1" class="exam-taking__group">
+          <div v-for="(question, index) in currentStep" :key="question.id" class="exam-taking__group-item">
+            <p class="exam-taking__group-number">Сұрақ {{ questionNumber(index) }}</p>
+            <component
+              :is="questionComponent(question)"
+              :question="question"
+              :model-value="answers[question.id]"
+              @update:modelValue="(v) => setAnswerFor(question.id, v)"
+              @update:answer="(v) => setAnswerFor(question.id, v)"
+            />
+          </div>
+        </div>
+
         <component
+          v-else
           :is="questionComponent(currentQuestion)"
           :key="currentQuestion.id"
           :question="currentQuestion"
           :model-value="answers[currentQuestion.id]"
-          @update:modelValue="setAnswer"
-          @update:answer="setAnswer"
+          @update:modelValue="(v) => setAnswerFor(currentQuestion.id, v)"
+          @update:answer="(v) => setAnswerFor(currentQuestion.id, v)"
         />
 
         <div class="exam-taking__nav">
@@ -543,6 +603,34 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.exam-taking__group {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.exam-taking__group-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.exam-taking__group-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.exam-taking__group-number {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  color: var(--color-text-secondary);
 }
 
 .exam-taking__nav {
