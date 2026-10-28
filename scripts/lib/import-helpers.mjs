@@ -70,16 +70,18 @@ export function matching({ text, audio = null, options, correct, points = 1 }) {
   }
 }
 
-// Always manual-graded: the schema's auto-grading is exact jsonb equality,
-// too fragile for free-text reading-comprehension answers (see project notes).
-export function shortAnswer({ text, image = null, audio = null, placeholder = null, points = 1 }) {
+// Manual-graded by default: free-text reading-comprehension answers are too
+// varied for auto-grading. Pass `correct` only for closed gap-fills (a number
+// or one/two words): an array of accepted spellings, stored as "a | b" and
+// compared case/whitespace-insensitively by submit_answer (patch 10).
+export function shortAnswer({ text, image = null, audio = null, placeholder = null, correct = null, points = 1 }) {
   return {
     question_type: 'short_answer',
     points,
     image,
     audio,
     content: { text, ...(placeholder ? { placeholder } : {}) },
-    requiresManual: true,
+    ...(correct ? { correctAnswer: [].concat(correct).join(' | ') } : { requiresManual: true }),
   }
 }
 

@@ -11,7 +11,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'saved'])
 
-const LEVELS = ['Pre-A1', 'A1', 'A2', 'Above A2']
+const LEVELS = ['Pre-A1', 'A1', 'A2', 'Above A2', 'B1']
 
 const id = ref('')
 const name = ref('')

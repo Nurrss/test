@@ -15,6 +15,13 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // locked режимінде ойнату орны осы кілтпен (талпыныс id) localStorage-та
+  // сақталады: бетті жаңартқанда аудио басынан емес, тоқтаған жерінен
+  // жалғасады — әйтпесе ұзын "all parts" жазбасы басынан қайта ойнап кетеді.
+  resumeKey: {
+    type: String,
+    default: null,
+  },
 })
 
 const audioEl = ref(null)
@@ -32,6 +39,28 @@ function formatTime(seconds) {
   return `${m}:${s}`
 }
 
+const storageKey = computed(() =>
+  props.locked && props.resumeKey ? `audio-pos:${props.resumeKey}:${props.src}` : null
+)
+
+function readSavedPosition() {
+  if (!storageKey.value) return 0
+  try {
+    return Number(localStorage.getItem(storageKey.value)) || 0
+  } catch {
+    return 0
+  }
+}
+
+function savePosition(seconds) {
+  if (!storageKey.value) return
+  try {
+    localStorage.setItem(storageKey.value, String(seconds))
+  } catch {
+    // storage unavailable (private mode) — resume is best-effort
+  }
+}
+
 const progressRatio = computed(() => (duration.value ? currentTime.value / duration.value : 0))
 
 function togglePlay() {
@@ -45,15 +74,26 @@ function togglePlay() {
 
 function onTimeUpdate() {
   currentTime.value = audioEl.value.currentTime
+  savePosition(currentTime.value)
 }
 
 function onLoadedMetadata() {
   duration.value = audioEl.value.duration
+  const saved = readSavedPosition()
+  if (saved <= 0) return
+  if (saved >= duration.value - 0.5) {
+    audioEl.value.pause()
+    currentTime.value = duration.value
+    hasEnded.value = true
+    return
+  }
+  audioEl.value.currentTime = saved
 }
 
 function onEnded() {
   isPlaying.value = false
   hasEnded.value = true
+  savePosition(duration.value)
 }
 
 function seek(event) {

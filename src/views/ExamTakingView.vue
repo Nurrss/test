@@ -47,6 +47,12 @@ const currentSection = computed(() => sectionsData.value[currentSectionIndex.val
 // жалғыз топ, бұрынғы мінез-құлық сақталады.
 const GROUPED_PART_INDEXES = new Set([0, 2]) // 0-based: 1-Part, 3-Part
 
+// Если у вопроса задан content.part (одна общая запись на весь Listening,
+// напр. B1 "all parts"), Part определяется по нему и всегда показывается
+// целиком; аудио при этом общее (тот же media_url), поэтому плеер не
+// пересоздаётся между Part-ами и запись идёт непрерывно.
+const partKey = (q) => q.content?.part ?? q.media_url
+
 const currentSectionSteps = computed(() => {
   const questions = currentSection.value?.questions || []
   if (currentSection.value?.key !== 'listening') return questions.map((q) => [q])
@@ -55,7 +61,7 @@ const currentSectionSteps = computed(() => {
   const naturalGroups = []
   for (const q of questions) {
     const lastGroup = naturalGroups[naturalGroups.length - 1]
-    if (lastGroup && lastGroup[0].media_url === q.media_url) {
+    if (lastGroup && partKey(lastGroup[0]) === partKey(q)) {
       lastGroup.push(q)
     } else {
       naturalGroups.push([q])
@@ -63,7 +69,7 @@ const currentSectionSteps = computed(() => {
   }
 
   return naturalGroups.flatMap((group, partIndex) =>
-    GROUPED_PART_INDEXES.has(partIndex) ? [group] : group.map((q) => [q])
+    GROUPED_PART_INDEXES.has(partIndex) || group[0].content?.part != null ? [group] : group.map((q) => [q])
   )
 })
 
@@ -453,6 +459,7 @@ onBeforeUnmount(() => {
           :key="currentQuestion.media_url"
           :src="currentQuestion.media_url"
           :locked="currentSection.key === 'listening'"
+          :resume-key="attempt?.id"
         />
 
         <!-- Топталған Part (1 және 3 — GROUPED_PART_INDEXES): барлық сұрағы

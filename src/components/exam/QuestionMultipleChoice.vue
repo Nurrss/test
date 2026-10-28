@@ -93,6 +93,7 @@ defineEmits(['update:modelValue'])
 .mc-question__text {
   font-size: 16px;
   font-weight: 600;
+  white-space: pre-line;
 }
 
 .mc-question__options {

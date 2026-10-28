@@ -327,8 +327,8 @@ async function handleSubmit() {
           <AppInput
             v-if="shortAnswerMode === 'auto'"
             v-model="shortAnswerCorrect"
-            label="Дұрыс жауап (әріптеп сәйкес болу керек)"
-            placeholder="paris"
+            label="Дұрыс жауап (регистр маңызды емес; баламаларды | арқылы бөліңіз)"
+            placeholder="7 | seven"
           />
         </div>
 

@@ -55,6 +55,7 @@ const isLongForm = computed(() => props.question.question_type === 'open_text')
 .text-question__text {
   font-size: 16px;
   font-weight: 600;
+  white-space: pre-line;
 }
 
 .text-question__textarea {
