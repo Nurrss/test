@@ -55,4 +55,4 @@ jobs:
           echo "keepalive_ping: HTTP $code $(cat /tmp/body)"
           test "$code" = "200"
           echo "auth health: HTTP $(call "$SUPABASE_URL/auth/v1/health")"
-          echo "storage: HTTP $(call "$SUPABASE_URL/storage/v1/bucket/listening-audio")"
+          echo "storage: HTTP $(call -X POST "$SUPABASE_URL/storage/v1/object/list/listening-audio" -H "Content-Type: application/json" -d '{"prefix":"","limit":1}')"
