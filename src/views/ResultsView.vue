@@ -11,6 +11,7 @@ import SectionScoreBars from '../components/results/SectionScoreBars.vue'
 import CefrScaleTable from '../components/results/CefrScaleTable.vue'
 import ProgressChart from '../components/results/ProgressChart.vue'
 import ComparisonChart from '../components/results/ComparisonChart.vue'
+import QuestionBreakdown from '../components/results/QuestionBreakdown.vue'
 
 const route = useRoute()
 
@@ -18,6 +19,8 @@ const loading = ref(true)
 const errorMessage = ref('')
 const student = ref(null)
 const sectionScores = ref([])
+const breakdownSections = ref([])
+const breakdownError = ref('')
 const progressPoints = ref([])
 const comparisonRows = ref([])
 const allowingRetake = ref(false)
@@ -41,6 +44,97 @@ const donutSegments = computed(() =>
   sectionScores.value.map((section) => ({ value: section.value, color: section.color }))
 )
 const comment = computed(() => (student.value ? commentByLevel[student.value.cefr_level] : ''))
+
+function isBlank(value) {
+  return value === null || value === undefined || value === ''
+}
+
+function questionStatus(question, row) {
+  if (!row) return 'empty'
+  if (question.requires_manual_grading) {
+    return row.points_awarded === null ? 'pending' : 'graded'
+  }
+  if (isBlank(row.answer)) return 'empty'
+  if (row.is_correct === true) return 'correct'
+  if (row.is_correct === false) return 'wrong'
+  return 'pending'
+}
+
+// Жауаптар базада option id ретінде сақталады ("a", "yes") — мұғалімге
+// нұсқаның мәтіні көрсетіледі.
+function displayValue(question, value) {
+  if (isBlank(value)) return ''
+  const option = question.content?.options?.find((o) => o.id === value)
+  if (option) return option.label || String(option.id).toUpperCase()
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+function displayCorrectAnswer(question) {
+  if (question.requires_manual_grading) return ''
+  const key = Array.isArray(question.question_answers)
+    ? question.question_answers[0]?.correct_answer
+    : question.question_answers?.correct_answer
+  if (question.question_type === 'short_answer' && typeof key === 'string') {
+    // "7 | seven" — submit_answer қабылдайтын баламалар тізімі (патч №10).
+    return key
+      .split('|')
+      .map((alt) => alt.trim())
+      .filter(Boolean)
+      .join(' / ')
+  }
+  return displayValue(question, key)
+}
+
+async function signAudioUrls(paths) {
+  if (!paths.length) return {}
+  const { data } = await supabase.storage.from('speaking-recordings').createSignedUrls(paths, 3600)
+  return Object.fromEntries((data || []).filter((s) => s.signedUrl).map((s) => [s.path, s.signedUrl]))
+}
+
+async function buildBreakdown(questions, answers) {
+  const answerByQuestion = new Map(answers.map((a) => [a.question_id, a]))
+  const audioUrls = await signAudioUrls(answers.map((a) => a.audio_path).filter(Boolean))
+
+  return Object.keys(sectionMeta)
+    .map((key) => {
+      const rows = questions
+        .filter((q) => q.section === key)
+        .sort((a, b) => a.order_index - b.order_index)
+        .map((q) => {
+          const row = answerByQuestion.get(q.id)
+          return {
+            id: q.id,
+            number: q.order_index,
+            text: q.content?.text || '',
+            statement: q.content?.statement || '',
+            imageUrl: q.content?.image_url || '',
+            answer: displayValue(q, row?.answer),
+            audioPath: row?.audio_path || '',
+            audioUrl: audioUrls[row?.audio_path] || '',
+            correctAnswer: displayCorrectAnswer(q),
+            feedback: row?.teacher_feedback || '',
+            points: row ? (row.points_awarded === null ? null : Number(row.points_awarded)) : 0,
+            maxPoints: Number(q.max_points),
+            status: questionStatus(q, row),
+          }
+        })
+
+      const counts = { correct: 0, wrong: 0, empty: 0, pending: 0 }
+      rows.forEach((r) => {
+        if (r.status in counts) counts[r.status] += 1
+      })
+
+      return {
+        key,
+        label: sectionMeta[key].label,
+        score: rows.reduce((sum, r) => sum + (r.points || 0), 0),
+        max: rows.reduce((sum, r) => sum + r.maxPoints, 0),
+        counts,
+        rows,
+      }
+    })
+    .filter((section) => section.rows.length)
+}
 
 async function loadResults(attemptId) {
   if (!attemptId) {
@@ -66,13 +160,27 @@ async function loadResults(attemptId) {
     return
   }
 
-  const [{ data: questions }, { data: answers }] = await Promise.all([
-    supabase.from('questions').select('section, max_points').eq('variant_id', attempt.variant_id),
+  const [
+    { data: questions, error: questionsError },
+    { data: answers, error: answersError },
+  ] = await Promise.all([
+    supabase
+      .from('questions')
+      .select(
+        'id, section, order_index, question_type, content, max_points, requires_manual_grading, question_answers(correct_answer)'
+      )
+      .eq('variant_id', attempt.variant_id),
     supabase
       .from('student_answers')
-      .select('points_awarded, questions(section)')
+      .select(
+        'question_id, answer, audio_path, is_correct, points_awarded, teacher_feedback, questions(section)'
+      )
       .eq('attempt_id', attemptId),
   ])
+
+  const queryError = questionsError || answersError
+  breakdownError.value = queryError ? 'Сұрақтарды жүктеу мүмкін болмады: ' + queryError.message : ''
+  breakdownSections.value = queryError ? [] : await buildBreakdown(questions || [], answers || [])
 
   const maxBySection = (questions || []).reduce((map, q) => {
     map[q.section] = (map[q.section] || 0) + Number(q.max_points)
@@ -232,6 +340,12 @@ watch(
         </AppCard>
       </div>
 
+      <AppCard class="results__questions">
+        <h2>Сұрақтар бойынша нәтиже</h2>
+        <p v-if="breakdownError" class="results__status--error">{{ breakdownError }}</p>
+        <QuestionBreakdown v-else :sections="breakdownSections" />
+      </AppCard>
+
       <div class="results__bottom-grid">
         <AppCard>
           <h2>Уақыт бойынша прогресс</h2>
@@ -349,6 +463,7 @@ watch(
 
 .results__sections h2,
 .results__scale h2,
+.results__questions h2,
 .results__bottom-grid h2 {
   margin-bottom: 1.25rem;
 }
